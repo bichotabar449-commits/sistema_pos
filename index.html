@@ -1,285 +1,292 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>POS estilo Loggro — Mesas & Comandas</title> 
-<meta name="description" content="POS inspirado en Loggro Restobar — mesas, comandas cocina/bar, ticket, persistencia local." />
-<!-- Tailwind via CDN para diseño rápido -->
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: #f3f4f6; }
-  .app { max-width:1200px; margin:18px auto; display:grid; grid-template-columns: 320px 1fr; gap:18px; padding:12px; }
-  .panel { background: white; border-radius:12px; padding:12px; box-shadow: 0 6px 18px rgba(15,23,42,0.06); min-height:120px; }
-  .mesa-card { border-radius:10px; padding:10px; cursor:pointer; transition:transform .12s, box-shadow .12s; }
-  .mesa-card:hover{ transform:translateY(-4px); box-shadow:0 10px 20px rgba(2,6,23,0.08); }
-  .producto { border-radius:10px; padding:10px; cursor:pointer; transition:transform .12s; }
-  .producto:hover{ transform:translateY(-4px); box-shadow:0 8px 16px rgba(2,6,23,0.06); }
-  .small-muted{ font-size:12px; color:#6b7280; }
-  @media (max-width:900px){ .app{ grid-template-columns: 1fr; } .left-col { order:2 } .right-col { order:1 } }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>POS — Réplica Cuenti (Mock)</title>
+  <style>
+    :root{--bg:#f3f6fb;--card:#ffffff;--accent:#0b63c6;--muted:#6b7280;--success:#16a34a;--danger:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Segoe UI,Arial;background:var(--bg);color:#0f1724}
+    .wrap{display:grid;grid-template-columns:300px 1fr 420px;gap:16px;padding:16px;height:100vh}
+    .card{background:var(--card);border-radius:10px;padding:12px;box-shadow:0 1px 4px rgba(16,24,40,0.05);display:flex;flex-direction:column}
+    .brand{font-weight:700;color:var(--accent);font-size:18px}
+    .small{font-size:13px;color:var(--muted)}
+    /* Left: mesas */
+    #mesasGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .mesa{padding:10px;border-radius:8px;border:1px solid #e6eef8;cursor:pointer;background:#fff}
+    .mesa.occ{border-color:#f59e0b;background:#fff7e6}
+    /* Center: productos */
+    #controls{display:flex;gap:8px;align-items:center}
+    #cats{display:flex;gap:6px;overflow:auto;margin-top:8px}
+    .cat{padding:6px 10px;border-radius:999px;background:#eef2ff;border:1px solid #e6edff;cursor:pointer;font-size:13px}
+    .cat.active{background:var(--accent);color:#fff}
+    #products{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px;overflow:auto}
+    .prod{background:#fff;padding:10px;border-radius:8px;border:1px solid #e9f0ff;cursor:pointer;display:flex;flex-direction:column;gap:6px;align-items:center}
+    .prod img{width:100%;height:90px;object-fit:cover;border-radius:6px}
+    .prodName{font-weight:600}
+    .prodPrice{color:var(--muted);font-size:13px}
+    /* Right: carrito */
+    #cartList{overflow:auto;max-height:60vh;margin-top:8px}
+    .line{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f3f6fb}
+    .qty{display:inline-block;padding:4px 8px;border-radius:6px;background:#f3f6fb}
+    .row-actions{display:flex;gap:6px}
+
+    .footer-actions{display:flex;gap:8px;margin-top:10px}
+    .btn{padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+    .btn.primary{background:var(--accent);color:#fff}
+    .btn.success{background:var(--success);color:#fff}
+    .btn.ghost{background:transparent;border:1px solid #e6eef8}
+
+    /* Modal */
+    #modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center}
+    #modal .box{background:#fff;padding:14px;border-radius:8px;width:520px;max-height:80vh;overflow:auto}
+    pre{white-space:pre-wrap;word-break:break-word}
+  </style>
 </head>
 <body>
-
-<div class="app">
-
-  <!-- LEFT: Mesas -->
-  <div class="panel left-col">
-    <div class="flex items-center justify-between mb-3">
-      <div>
-        <h2 class="text-lg font-semibold">Mesas</h2>
-        <div class="small-muted">Selecciona para ver/editar la cuenta</div>
+  <div class="wrap">
+    <!-- Left -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="brand">Cuenti - Mock POS</div>
+          <div class="small">Réplica rápida — Mock facturación</div>
+        </div>
+        <div class="small">v1</div>
       </div>
-      <div class="flex gap-2">
-        <button id="btn-reset" class="px-3 py-1 bg-red-500 text-white rounded">Reset</button>
+
+      <div style="margin-top:12px"><strong>Mesas / Puntos</strong></div>
+      <div id="mesasGrid"></div>
+
+      <div style="margin-top:12px"><input id="newMesa" placeholder="Nombre mesa" style="width:100%;padding:8px;border-radius:6px;border:1px solid #e6eef8"/></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="addMesaBtn" class="btn primary">Agregar mesa</button>
+        <button id="resetBtn" class="btn ghost">Reset</button>
       </div>
+
+      <div style="margin-top:12px" class="small">Buscar mesas</div>
+      <input id="searchMesa" placeholder="Buscar..." style="width:100%;padding:8px;border-radius:6px;border:1px solid #e6eef8;margin-top:6px" />
     </div>
 
-    <div id="mesa-controls" class="flex gap-2 mb-3">
-      <input id="newTableName" class="flex-1 border rounded px-2 py-1" placeholder="Nombre mesa (ej. M1, Barra)" />
-      <button id="btn-add-table" class="px-3 py-1 bg-indigo-600 text-white rounded">Agregar</button>
+    <!-- Center -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700;font-size:16px">Productos</div>
+          <div class="small">Inventario y menú</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="searchProd" placeholder="Buscar producto..." style="padding:8px;border-radius:6px;border:1px solid #e6eef8" />
+          <button id="demoBtn" class="btn ghost">Demo</button>
+        </div>
+      </div>
+
+      <div id="cats"></div>
+      <div id="products"></div>
     </div>
 
-    <div id="tablesList" class="grid gap-2"></div>
+    <!-- Right -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong>Carrito</strong><div class="small" id="tableLabel">Mesa: -</div></div>
+        <div class="small" id="orderCount">0 items</div>
+      </div>
+
+      <div id="cartList"></div>
+
+      <div style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between"><div class="small">Subtotal</div><div id="subtotal">$0</div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px"><div class="small">Propina %</div><input id="tipPct" type="number" min="0" max="100" value="0" style="width:80px;padding:6px;border-radius:6px;border:1px solid #e6eef8" onchange="updateTotals()"/></div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:700"><div>Total</div><div id="grandTotal">$0</div></div>
+      </div>
+
+      <div class="footer-actions">
+        <button id="factBtn" class="btn primary">Emitir factura (mock)</button>
+        <button id="checkoutBtn" class="btn success">Cobrar</button>
+        <button id="reportsBtn" class="btn ghost">Reportes</button>
+      </div>
+    </div>
   </div>
 
-  <!-- RIGHT: Cuenta y Productos -->
-  <div class="panel right-col flex flex-col gap-3">
-    <div class="flex items-start justify-between">
-      <div>
-        <h2 id="selectedTableTitle" class="text-xl font-bold">— Selecciona una mesa —</h2>
-        <div id="selectedTableState" class="small-muted">Estado: —</div>
-      </div>
-      <div class="text-right">
-        <div class="small-muted">Subtotal</div>
-        <div id="subtotalDisplay" class="text-lg font-semibold">$0.00</div>
-      </div>
-    </div>
+  <!-- Modal -->
+  <div id="modal"><div class="box" id="modalBox"></div></div>
 
-    <!-- Order items -->
-    <div class="overflow-auto" style="max-height:40vh;">
-      <ul id="orderItems" class="space-y-2"></ul>
-    </div>
+  <script>
+    // Simple POS inspired by Cuenti — mock electronic invoice generator
+    const STORAGE_KEY = 'pos_cuenti_mock_v1';
+    const state = { mesas: [], categorias: [], productos: [], pedidos: {}, ventas: [] };
 
-    <div class="flex items-center justify-between pt-2 border-t">
-      <div class="flex gap-2">
-        <button id="btn-save-table" class="px-3 py-2 bg-blue-600 text-white rounded">Guardar Mesa</button>
-        <button id="btn-clear-table" class="px-3 py-2 bg-gray-200 rounded">Limpiar Mesa</button>
-        <button id="btn-discount" class="px-3 py-2 bg-yellow-500 rounded text-white">Descuento</button>
-      </div>
-      <div class="flex gap-2">
-        <button id="btn-print-kitchen" class="px-3 py-2 bg-orange-600 text-white rounded">Comanda Cocina</button>
-        <button id="btn-print-bar" class="px-3 py-2 bg-purple-600 text-white rounded">Comanda Bar</button>
-        <button id="btn-pay" class="px-3 py-2 bg-green-600 text-white rounded">Cobrar</button>
-      </div>
-    </div>
+    function save(){localStorage.setItem(STORAGE_KEY, JSON.stringify(state))}
+    function load(){ const s = localStorage.getItem(STORAGE_KEY); if(s) Object.assign(state, JSON.parse(s)); else initDemo(); }
 
-    <!-- Productos -->
-    <div>
-      <h3 class="font-semibold mt-2">Productos</h3>
-      <div class="small-muted mb-2">Haz click para añadir a la mesa seleccionada</div>
-      <div id="productsGrid" class="grid grid-cols-3 gap-3"></div>
-    </div>
+    function initDemo(){
+      state.categorias = ['Comidas','Bebidas','Postres'];
+      state.productos = [
+        {id:gid(),name:'Hamburguesa Doble',price:16000,cat:'Comidas',stock:20},
+        {id:gid(),name:'Pizza Familiar',price:28000,cat:'Comidas',stock:8},
+        {id:gid(),name:'Gaseosa 500ml',price:4500,cat:'Bebidas',stock:30},
+        {id:gid(),name:'Cerveza',price:8000,cat:'Bebidas',stock:40},
+        {id:gid(),name:'Helado',price:6000,cat:'Postres',stock:15}
+      ];
+      state.mesas = ['Mesa 1','Mesa 2','Mesa 3','Caja'];
+      state.pedidos = {};
+      state.ventas = [];
+      save();
+    }
 
-  </div>
-</div>
+    function gid(){return 'x'+Math.random().toString(36).slice(2,9)}
 
-<!-- audio ding -->
-<audio id="ding" src="https://assets.mixkit.co/sfx/download/mixkit-positive-notification-951.wav" preload="auto"></audio>
+    // Rendering
+    const mesasGrid = () => document.getElementById('mesasGrid');
+    const productsEl = () => document.getElementById('products');
+    const catsEl = () => document.getElementById('cats');
+    const cartList = () => document.getElementById('cartList');
+    let activeMesa = null;
+    let activeCat = null;
 
-<script>
-/* ========= Datos y Estado ========= */
-const STORAGE_KEY = 'pos_loggro_style_v1';
-let state = {
-  products: [],
-  tables: [],
-  selectedTableId: null,
-  settings: { name: 'Mi Restaurante' }
-};
+    function renderMesas(){
+      const grid = mesasGrid();
+      grid.innerHTML='';
+      const q=document.getElementById('searchMesa').value.toLowerCase();
+      state.mesas.filter(m=>m.toLowerCase().includes(q)).forEach(m=>{
+        const occ = (state.pedidos[m] && state.pedidos[m].length>0);
+        const div = document.createElement('div');
+        div.className = 'mesa' + (occ? ' occ':'');
+        div.innerHTML = `<div style="font-weight:600">${m}</div><div class="small">${occ? state.pedidos[m].length + ' ítems - $'+sum(m): 'Libre'}</div>`;
+        div.onclick = ()=>{ activeMesa = m; document.getElementById('tableLabel').textContent = 'Mesa: '+m; renderCart(); };
+        grid.appendChild(div);
+      });
+    }
 
-/* Productos demo (categoría determina cocina/bar) */
-const demoProducts = [
-  { id:'p1', name:'Pizza Margarita', price:22000, category:'Cocina' },
-  { id:'p2', name:'Hamburguesa', price:18000, category:'Cocina' },
-  { id:'p3', name:'Papas Fritas', price:7000, category:'Cocina' },
-  { id:'p4', name:'Coca-Cola 350ml', price:4000, category:'Bar' },
-  { id:'p5', name:'Mojito', price:12000, category:'Bar' },
-  { id:'p6', name:'Café', price:3000, category:'Bar' }
-];
+    function renderCats(){
+      const el = catsEl();
+      el.innerHTML='';
+      state.categorias.forEach(c=>{
+        const b=document.createElement('div');
+        b.className='cat'+(c===activeCat?' active':'');
+        b.textContent = c;
+        b.onclick = ()=>{ activeCat=c; renderProducts(); renderCats(); };
+        el.appendChild(b);
+      });
+    }
 
-function uid(pref='id'){ return pref + Math.random().toString(36).slice(2,9); }
-function money(n){ return '$' + Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+    function renderProducts(){
+      const el = productsEl();
+      el.innerHTML='';
+      const term = document.getElementById('searchProd').value.toLowerCase();
+      state.productos.filter(p=> (activeCat? p.cat===activeCat:true) && p.name.toLowerCase().includes(term)).forEach(p=>{
+        const d=document.createElement('div');
+        d.className='prod';
+        d.innerHTML = `<div style="font-weight:600">${p.name}</div><div class="small">${p.cat} • Stock: ${p.stock||0}</div><div style="margin-top:6px;font-weight:700">$${p.price}</div>`;
+        d.onclick = ()=> addToCart(p.id);
+        el.appendChild(d);
+      });
+    }
 
-/* ========= Persistencia ========= */
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderTables(); renderSelectedTable(); }
-function load(){ const v = localStorage.getItem(STORAGE_KEY); if(v){ state = JSON.parse(v); } else { state.products = demoProducts; state.tables = [ {id:'t1', name:'M1', order:{items:[], discount:0, createdAt:null}, state:'Libre'}, {id:'t2', name:'M2', order:{items:[], discount:0, createdAt:null}, state:'Libre'} ]; state.selectedTableId = null; save(); } }
+    function addMesa(){ const v = document.getElementById('newMesa').value.trim(); if(!v) return alert('Ingrese nombre de la mesa'); state.mesas.push(v); document.getElementById('newMesa').value=''; save(); renderMesas(); }
 
-/* ========= Renderizado ========= */
-function renderTables(){
-  const container = document.getElementById('tablesList'); container.innerHTML = '';
-  state.tables.forEach(t=>{
-    const div = document.createElement('div');
-    div.className = 'mesa-card flex justify-between items-center';
-    div.style.background = t.id === state.selectedTableId ? '#eef2ff' : '#fff';
-    div.innerHTML = `
-      <div>
-        <div class="font-semibold">${t.name}</div>
-        <div class="small-muted">${t.order.items.length} items</div>
-      </div>
-      <div class="text-right">
-        <div class="font-medium">${money(calcSubtotal(t))}</div>
-        <div class="small-muted">${t.state}</div>
-      </div>
-    `;
-    div.onclick = ()=> { selectTable(t.id); };
-    container.appendChild(div);
-  });
-}
+    function seedProducts(){ initDemo(); load(); renderAll(); }
+    function resetDemo(){ if(confirm('Resetear demo?')){ localStorage.removeItem(STORAGE_KEY); initDemo(); load(); renderAll(); } }
 
-function renderProducts(){
-  const g = document.getElementById('productsGrid'); g.innerHTML = '';
-  state.products.forEach(p=>{
-    const d = document.createElement('div');
-    d.className = 'producto panel';
-    d.innerHTML = `<div class="font-semibold">${p.name}</div><div class="small-muted">${p.category}</div><div class="mt-2 font-bold">${money(p.price)}</div>`;
-    d.onclick = ()=> addProductToSelected(p.id);
-    g.appendChild(d);
-  });
-}
+    function addToCart(pid){ if(!activeMesa) return alert('Selecciona una mesa'); const prod = state.productos.find(x=>x.id===pid); if(!prod) return; if(prod.stock<=0) return alert('Sin stock'); if(!state.pedidos[activeMesa]) state.pedidos[activeMesa]=[]; const ex = state.pedidos[activeMesa].find(i=>i.id===pid); if(ex){ ex.qty++; } else { state.pedidos[activeMesa].push({ id:prod.id, name:prod.name, price:prod.price, qty:1 }); } prod.stock--; save(); renderCart(); renderMesas(); }
 
-function renderSelectedTable(){
-  const title = document.getElementById('selectedTableTitle');
-  const stateEl = document.getElementById('selectedTableState');
-  const itemsUl = document.getElementById('orderItems');
-  const subtotalEl = document.getElementById('subtotalDisplay');
-  itemsUl.innerHTML = '';
-  if(!state.selectedTableId){ title.innerText = '— Selecciona una mesa —'; stateEl.innerText = 'Estado: —'; subtotalEl.innerText = money(0); return; }
-  const table = state.tables.find(t=>t.id===state.selectedTableId);
-  title.innerText = table.name;
-  stateEl.innerText = 'Estado: ' + table.state;
-  table.order.items.forEach((it, idx)=>{
-    const prod = state.products.find(p=>p.id===it.productId) || {name:'Producto', price:it.price};
-    const li = document.createElement('li');
-    li.className = 'flex justify-between items-center';
-    li.style.padding = '8px';
-    li.innerHTML = `<div><div class="font-medium">${prod.name}${it.mod? ' ('+it.mod+')':''}</div><div class="small-muted">${it.qty} x ${money(it.price)}</div></div>
-                    <div class="flex gap-2">
-                      <button data-idx="${idx}" class="dec px-2 py-1 border rounded">-</button>
-                      <button data-idx="${idx}" class="inc px-2 py-1 border rounded">+</button>
-                      <button data-idx="${idx}" class="del px-2 py-1 border rounded">Eliminar</button>
-                    </div>`;
-    itemsUl.appendChild(li);
-  });
-  // attach handlers
-  itemsUl.querySelectorAll('.del').forEach(b=> b.onclick = e=>{ const idx = +e.target.dataset.idx; table.order.items.splice(idx,1); if(table.order.items.length===0) table.state='Libre'; save(); renderSelectedTable();});
-  itemsUl.querySelectorAll('.dec').forEach(b=> b.onclick = e=>{ const idx = +e.target.dataset.idx; const it = table.order.items[idx]; if(it.qty>1) it.qty--; else table.order.items.splice(idx,1); if(table.order.items.length===0) table.state='Libre'; save(); renderSelectedTable();});
-  itemsUl.querySelectorAll('.inc').forEach(b=> b.onclick = e=>{ const idx = +e.target.dataset.idx; table.order.items[idx].qty++; save(); renderSelectedTable();});
-  // totals
-  const subtotal = calcSubtotal(table);
-  subtotalEl.innerText = money(subtotal);
-}
+    function renderCart(){ const el = cartList(); el.innerHTML=''; if(!activeMesa){ el.innerHTML = '<div class="small">Seleccione mesa</div>'; document.getElementById('orderCount').textContent='0 items'; updateTotals(); return; } const items = state.pedidos[activeMesa]||[]; if(!items.length){ el.innerHTML = '<div class="small">Carrito vacío</div>'; document.getElementById('orderCount').textContent='0 items'; updateTotals(); return; } items.forEach((it,idx)=>{ const row = document.createElement('div'); row.className='line'; row.innerHTML = `<div><div style="font-weight:600">${it.name}</div><div class="small">x${it.qty}</div></div><div style="display:flex;gap:8px;align-items:center"><div>$${it.price*it.qty}</div><div class="row-actions"><button class="btn" onclick="inc(${idx})">+</button><button class="btn" onclick="dec(${idx})">-</button><button class="btn" onclick="removeItem(${idx})">x</button></div></div>`; el.appendChild(row); }); document.getElementById('orderCount').textContent = items.reduce((s,i)=>s+i.qty,0) + ' items'; updateTotals(); }
 
-/* ========= Lógica mesas y ordenes ========= */
-function createTable(name){
-  const id = uid('t');
-  state.tables.push({ id, name: name || ('Mesa ' + (state.tables.length+1)), order:{ items:[], discount:0, createdAt:null }, state:'Libre' });
-  save();
-  selectTable(id);
-}
-function selectTable(id){ state.selectedTableId = id; renderTables(); renderSelectedTable(); }
-function calcSubtotal(table){ return (table.order.items||[]).reduce((s,i)=> s + i.qty * i.price, 0); }
+    function inc(idx){ const items = state.pedidos[activeMesa]; const item = items[idx]; const prod = state.productos.find(p=>p.id===item.id); if(prod.stock<=0) return alert('Sin stock'); item.qty++; prod.stock--; save(); renderCart(); renderMesas(); }
+    function dec(idx){ const items = state.pedidos[activeMesa]; const item = items[idx]; const prod = state.productos.find(p=>p.id===item.id); if(item.qty>1){ item.qty--; prod.stock++; } else { // remove
+      prod.stock += item.qty; items.splice(idx,1);
+    } save(); renderCart(); renderMesas(); }
+    function removeItem(idx){ const items = state.pedidos[activeMesa]; const item = items[idx]; const prod = state.productos.find(p=>p.id===item.id); prod.stock += item.qty; items.splice(idx,1); save(); renderCart(); renderMesas(); }
 
-function addProductToSelected(productId){
-  if(!state.selectedTableId){ return alert('Selecciona una mesa primero'); }
-  const table = state.tables.find(t=>t.id===state.selectedTableId);
-  const prod = state.products.find(p=>p.id===productId);
-  if(!prod) return;
-  const mod = prompt('Modificador (ej. sin cebolla) — Enter para omitir') || '';
-  const existing = table.order.items.find(it=> it.productId===productId && it.mod===mod);
-  if(existing) existing.qty++;
-  else table.order.items.push({ productId, qty:1, price: prod.price, mod });
-  table.state = 'En curso';
-  if(!table.order.createdAt) table.order.createdAt = new Date().toISOString();
-  save();
-  renderSelectedTable();
-}
+    function sum(m){ const it = state.pedidos[m]||[]; return it.reduce((s,i)=>s + i.price*i.qty, 0); }
+    function updateTotals(){ const items = state.pedidos[activeMesa]||[]; const sub = items.reduce((s,i)=>s + i.price*i.qty, 0); document.getElementById('subtotal').textContent = '$' + sub; const tip = Number(document.getElementById('tipPct').value||0); const total = Math.round(sub * (1 + tip/100)); document.getElementById('grandTotal').textContent = '$' + total; }
 
-/* Guardar, limpiar, descuento, cobrar */
-function saveTable(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); table.state = table.order.items.length ? 'En curso' : 'Libre'; save(); alert('Mesa guardada'); }
-function clearTable(){ if(!state.selectedTableId) return; if(!confirm('Limpiar mesa y eliminar orden?')) return; const table = state.tables.find(t=>t.id===state.selectedTableId); table.order = { items:[], discount:0, createdAt:null }; table.state='Libre'; save(); renderSelectedTable(); }
-function applyDiscount(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); const v = prompt('Descuento (ej: 2000 o 10%)',''); if(v==null) return; if(String(v).includes('%')){ const perc = parseFloat(String(v).replace('%',''))/100; table.order.discount = Math.round(calcSubtotal(table) * perc); } else { const val = Number(v); if(isNaN(val)) return alert('Valor inválido'); table.order.discount = val; } save(); renderSelectedTable(); }
-function chargeTable(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); const subtotal = calcSubtotal(table); const total = Math.max(0, subtotal - (table.order.discount||0)); if(!confirm('Cobrar ' + money(total) + ' ?')) return; table.order = { items:[], discount:0, createdAt:null }; table.state = 'Libre'; save(); renderTables(); renderSelectedTable(); alert('Mesa cobrada'); }
+    // Mock factura electrónica: generate structured JSON and allow download/print
+    function mockFactura(){
+      if(!activeMesa) return alert('Seleccione mesa');
+      const items = state.pedidos[activeMesa]||[];
+      if(!items.length) return alert('Carrito vacío');
+      const tip = Number(document.getElementById('tipPct').value||0);
+      const sub = items.reduce((s,i)=>s + i.price*i.qty, 0);
+      const total = Math.round(sub * (1 + tip/100));
 
-/* ========= Impresión (comandas y ticket) ========= */
-function playDing(){ const a = document.getElementById('ding'); try{ a.currentTime = 0; a.play(); }catch(e){} }
-function buildComandaHTML(table, category){
-  const items = table.order.items.filter(it=> {
-    const p = state.products.find(x=>x.id===it.productId); return p && p.category && p.category.toLowerCase()===category.toLowerCase();
-  });
-  if(!items.length) return null;
-  const h = [];
-  h.push(`<div style="font-family:Arial;max-width:320px;padding:8px">`);
-  h.push(`<h3 style="margin:0">${state.settings.name}</h3>`);
-  h.push(`<div>Comanda: ${category}</div>`);
-  h.push(`<div>Mesa: ${table.name}</div>`);
-  h.push(`<div>Fecha: ${new Date(table.order.createdAt||Date.now()).toLocaleString()}</div><hr/>`);
-  items.forEach(it=>{ const p = state.products.find(x=>x.id===it.productId); h.push(`<div style="display:flex;justify-content:space-between;margin:6px 0"><div>${it.qty} x ${p.name}${it.mod? ' ('+it.mod+')':''}</div></div>`); });
-  h.push(`<hr/><div style="font-size:12px;color:#666">* Sin precios — Para cocina/bar</div>`);
-  h.push('</div>');
-  return h.join('');
-}
-function buildTicketHTML(table){
-  const h = []; h.push(`<div style="font-family:Arial;max-width:400px;padding:8px">`); h.push(`<h2 style="margin:0">${state.settings.name}</h2>`); h.push(`<div>Mesa: ${table.name}</div>`); h.push(`<div>Fecha: ${new Date(table.order.createdAt||Date.now()).toLocaleString()}</div><hr/>`);
-  table.order.items.forEach(it=>{ const p = state.products.find(x=>x.id===it.productId); h.push(`<div style="display:flex;justify-content:space-between"><div>${it.qty} x ${p.name}${it.mod? ' ('+it.mod+')':''}</div><div>${money(it.qty*it.price)}</div></div>`); });
-  const subtotal = calcSubtotal(table);
-  h.push(`<hr/><div style="display:flex;justify-content:space-between"><div>Subtotal</div><div>${money(subtotal)}</div></div>`);
-  h.push(`<div style="display:flex;justify-content:space-between"><div>Descuento</div><div>-${money(table.order.discount||0)}</div></div>`);
-  h.push(`<div style="display:flex;justify-content:space-between;font-weight:bold"><div>Total</div><div>${money(Math.max(0, subtotal - (table.order.discount||0)))}</div></div>`);
-  h.push(`<div style="text-align:center;margin-top:8px">Gracias por su visita</div></div>`);
-  return h.join('');
-}
-function printHTML(html){
-  if(!html) return alert('No hay items para imprimir en esta plantilla');
-  playDing();
-  const w = window.open('','_blank','width=380,height=600');
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  w.print();
-  setTimeout(()=> w.close(), 800);
-}
-function printKitchen(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); printHTML(buildComandaHTML(table,'Cocina')); }
-function printBar(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); printHTML(buildComandaHTML(table,'Bar')); }
-function printTicket(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); printHTML(buildTicketHTML(table)); }
+      const factura = {
+        id: 'FAC-'+gid().toUpperCase().slice(2,10),
+        fecha: new Date().toISOString(),
+        mesa: activeMesa,
+        items: JSON.parse(JSON.stringify(items)),
+        subtotal: sub,
+        propinaPct: tip,
+        total
+      };
 
-/* ========= Inicialización y wiring UI ========= */
-window.addEventListener('DOMContentLoaded', ()=>{
-  load();
-  renderProducts();
-  renderTables();
-  renderSelectedTable();
+      // Build modal content using DOM methods (safer than concatenated strings)
+      const box = document.getElementById('modalBox');
+      box.innerHTML = '';
 
-  document.getElementById('btn-add-table').onclick = ()=>{
-    const name = document.getElementById('newTableName').value.trim();
-    if(!name) return alert('Escribe un nombre para la mesa');
-    createTable(name || undefined);
-    document.getElementById('newTableName').value='';
-  };
-  document.getElementById('btn-save-table').onclick = saveTable;
-  document.getElementById('btn-clear-table').onclick = clearTable;
-  document.getElementById('btn-discount').onclick = applyDiscount;
-  document.getElementById('btn-pay').onclick = chargeTable;
-  document.getElementById('btn-print-kitchen').onclick = printKitchen;
-  document.getElementById('btn-print-bar').onclick = printBar;
-  document.getElementById('btn-reset').onclick = ()=>{ if(confirm('Borrar datos locales y restaurar demo?')){ localStorage.removeItem(STORAGE_KEY); location.reload(); } };
-});
+      const header = document.createElement('div');
+      header.style.display = 'flex';
+      header.style.justifyContent = 'space-between';
+      header.style.alignItems = 'center';
 
-/* Helper: createTable wrapper used in UI */
-function createTable(name){ createTable; const id = uid('t'); state.tables.push({ id, name: name || ('Mesa ' + (state.tables.length+1)), order:{ items:[], discount:0, createdAt:null }, state:'Libre' }); save(); selectTable(id); }
+      const hTitle = document.createElement('div');
+      hTitle.innerHTML = '<strong>Factura simulada</strong>';
+      const hClose = document.createElement('div');
+      const btnClose = document.createElement('button'); btnClose.className = 'btn ghost'; btnClose.textContent = 'Cerrar'; btnClose.onclick = closeModal;
+      hClose.appendChild(btnClose);
+      header.appendChild(hTitle); header.appendChild(hClose);
 
-/* Ensure product rendering function available globally */
-function renderProducts(){ const grid = document.getElementById('productsGrid'); grid.innerHTML=''; state.products.forEach(p=>{ const el = document.createElement('div'); el.className='producto'; el.style.background='#fff'; el.innerHTML = `<div class="font-semibold">${p.name}</div><div class="small-muted">${p.category}</div><div class="mt-2 font-bold">${money(p.price)}</div>`; el.onclick = ()=> addProductToSelected(p.id); grid.appendChild(el); }); }
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(factura, null, 2);
 
-</script>
+      const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px'; actions.style.marginTop = '8px';
+      const btnDownload = document.createElement('button'); btnDownload.className = 'btn primary'; btnDownload.textContent = 'Descargar JSON'; btnDownload.onclick = ()=> downloadFacturaObj(factura);
+      const btnPrint = document.createElement('button'); btnPrint.className = 'btn'; btnPrint.textContent = 'Imprimir'; btnPrint.onclick = ()=> printFacturaObj(factura);
+      actions.appendChild(btnDownload); actions.appendChild(btnPrint);
+
+      box.appendChild(header); box.appendChild(pre); box.appendChild(actions);
+      document.getElementById('modal').style.display = 'flex';
+    }
+
+    function downloadFacturaObj(obj){ const data = JSON.stringify(obj, null, 2); const blob = new Blob([data], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = (obj.id || 'factura') + '.json'; a.click(); URL.revokeObjectURL(url); }
+
+    function printFacturaObj(obj){ const w = window.open('','_blank'); if(!w) return alert('El navegador bloqueó la ventana emergente. Permite ventanas emergentes para imprimir.'); w.document.open(); w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Factura '+(obj.id||'')+'</title></head><body><pre id="ct"></pre></body></html>'); w.document.close(); try{ w.document.getElementById('ct').textContent = JSON.stringify(obj, null, 2); } catch(e){ /* fallback */ w.document.body.innerText = JSON.stringify(obj, null, 2); } w.focus(); w.print(); }
+
+    function closeModal(){ document.getElementById('modal').style.display='none'; }
+
+    // Checkout: register sale, clear order, keep sale in history
+    function checkout(){ if(!activeMesa) return alert('Seleccione mesa'); const items = state.pedidos[activeMesa]||[]; if(!items.length) return alert('Carrito vacío'); const tip = Number(document.getElementById('tipPct').value||0); const sub = items.reduce((s,i)=>s + i.price*i.qty, 0); const total = Math.round(sub * (1 + tip/100)); const venta = { id: gid(), mesa: activeMesa, items: JSON.parse(JSON.stringify(items)), subtotal: sub, tipPct: tip, total, fecha: new Date().toISOString() }; state.ventas.push(venta); // clear
+      state.pedidos[activeMesa] = []; save(); renderCart(); renderMesas(); alert('Venta registrada $'+total); }
+
+    // Reports
+    function showReports(){ const box = document.getElementById('modalBox'); let html = '<div style="display:flex;justify-content:space-between;align-items:center"><div><strong>Reportes</strong></div><div><button class="btn ghost" onclick="closeModal()">Cerrar</button></div></div><table style="width:100%;border-collapse:collapse;margin-top:8px"><tr><th>Mesa</th><th>Total</th><th>Fecha</th></tr>';
+      state.ventas.forEach(v=>{ html += `<tr><td style="padding:8px">${v.mesa}</td><td style="padding:8px">$${v.total}</td><td style="padding:8px">${new Date(v.fecha).toLocaleString()}</td></tr>` }); html += '</table><div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary" onclick="exportSales()">Exportar CSV</button></div>';
+      box.innerHTML = html; document.getElementById('modal').style.display = 'flex'; }
+
+    function exportSales(){ if(!state.ventas.length) return alert('No hay ventas'); let csv = 'id,mesa,total,fecha
+'; state.ventas.forEach(v=> csv += `${v.id},"${v.mesa}",${v.total},${v.fecha}
+`); const blob = new Blob([csv], {type:'text/csv'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'ventas.csv'; a.click(); URL.revokeObjectURL(url); }
+
+    // Utilities
+    function sumAll(){ return state.mesas.reduce((s,m)=> s + (sum(m)||0), 0); }
+
+    // Init + helpers
+    function renderAll(){ renderMesas(); renderProducts(); renderCart(); renderCats(); }
+
+    load(); renderAll();
+
+    // Attach event listeners (avoid inline onclick pitfalls)
+    document.getElementById('addMesaBtn').addEventListener('click', addMesa);
+    document.getElementById('resetBtn').addEventListener('click', resetDemo);
+    document.getElementById('searchMesa').addEventListener('input', renderMesas);
+    document.getElementById('demoBtn').addEventListener('click', seedProducts);
+    document.getElementById('searchProd').addEventListener('input', renderProducts);
+    document.getElementById('factBtn').addEventListener('click', mockFactura);
+    document.getElementById('checkoutBtn').addEventListener('click', checkout);
+    document.getElementById('reportsBtn').addEventListener('click', showReports);
+
+  </script>
 </body>
 </html>
+
