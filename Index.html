@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>POS estilo Loggro — Mesas & Comandas</title>
+<meta name="description" content="POS inspirado en Loggro Restobar — mesas, comandas cocina/bar, ticket, persistencia local." />
+<!-- Tailwind via CDN para diseño rápido -->
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: #f3f4f6; }
+  .app { max-width:1200px; margin:18px auto; display:grid; grid-template-columns: 320px 1fr; gap:18px; padding:12px; }
+  .panel { background: white; border-radius:12px; padding:12px; box-shadow: 0 6px 18px rgba(15,23,42,0.06); min-height:120px; }
+  .mesa-card { border-radius:10px; padding:10px; cursor:pointer; transition:transform .12s, box-shadow .12s; }
+  .mesa-card:hover{ transform:translateY(-4px); box-shadow:0 10px 20px rgba(2,6,23,0.08); }
+  .producto { border-radius:10px; padding:10px; cursor:pointer; transition:transform .12s; }
+  .producto:hover{ transform:translateY(-4px); box-shadow:0 8px 16px rgba(2,6,23,0.06); }
+  .small-muted{ font-size:12px; color:#6b7280; }
+  @media (max-width:900px){ .app{ grid-template-columns: 1fr; } .left-col { order:2 } .right-col { order:1 } }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- LEFT: Mesas -->
+  <div class="panel left-col">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h2 class="text-lg font-semibold">Mesas</h2>
+        <div class="small-muted">Selecciona para ver/editar la cuenta</div>
+      </div>
+      <div class="flex gap-2">
+        <button id="btn-reset" class="px-3 py-1 bg-red-500 text-white rounded">Reset</button>
+      </div>
+    </div>
+
+    <div id="mesa-controls" class="flex gap-2 mb-3">
+      <input id="newTableName" class="flex-1 border rounded px-2 py-1" placeholder="Nombre mesa (ej. M1, Barra)" />
+      <button id="btn-add-table" class="px-3 py-1 bg-indigo-600 text-white rounded">Agregar</button>
+    </div>
+
+    <div id="tablesList" class="grid gap-2"></div>
+  </div>
+
+  <!-- RIGHT: Cuenta y Productos -->
+  <div class="panel right-col flex flex-col gap-3">
+    <div class="flex items-start justify-between">
+      <div>
+        <h2 id="selectedTableTitle" class="text-xl font-bold">— Selecciona una mesa —</h2>
+        <div id="selectedTableState" class="small-muted">Estado: —</div>
+      </div>
+      <div class="text-right">
+        <div class="small-muted">Subtotal</div>
+        <div id="subtotalDisplay" class="text-lg font-semibold">$0.00</div>
+      </div>
+    </div>
+
+    <!-- Order items -->
+    <div class="overflow-auto" style="max-height:40vh;">
+      <ul id="orderItems" class="space-y-2"></ul>
+    </div>
+
+    <div class="flex items-center justify-between pt-2 border-t">
+      <div class="flex gap-2">
+        <button id="btn-save-table" class="px-3 py-2 bg-blue-600 text-white rounded">Guardar Mesa</button>
+        <button id="btn-clear-table" class="px-3 py-2 bg-gray-200 rounded">Limpiar Mesa</button>
+        <button id="btn-discount" class="px-3 py-2 bg-yellow-500 rounded text-white">Descuento</button>
+      </div>
+      <div class="flex gap-2">
+        <button id="btn-print-kitchen" class="px-3 py-2 bg-orange-600 text-white rounded">Comanda Cocina</button>
+        <button id="btn-print-bar" class="px-3 py-2 bg-purple-600 text-white rounded">Comanda Bar</button>
+        <button id="btn-pay" class="px-3 py-2 bg-green-600 text-white rounded">Cobrar</button>
+      </div>
+    </div>
+
+    <!-- Productos -->
+    <div>
+      <h3 class="font-semibold mt-2">Productos</h3>
+      <div class="small-muted mb-2">Haz click para añadir a la mesa seleccionada</div>
+      <div id="productsGrid" class="grid grid-cols-3 gap-3"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- audio ding -->
+<audio id="ding" src="https://assets.mixkit.co/sfx/download/mixkit-positive-notification-951.wav" preload="auto"></audio>
+
+<script>
+/* ========= Datos y Estado ========= */
+const STORAGE_KEY = 'pos_loggro_style_v1';
+let state = {
+  products: [],
+  tables: [],
+  selectedTableId: null,
+  settings: { name: 'Mi Restaurante' }
+};
+
+/* Productos demo (categoría determina cocina/bar) */
+const demoProducts = [
+  { id:'p1', name:'Pizza Margarita', price:22000, category:'Cocina' },
+  { id:'p2', name:'Hamburguesa', price:18000, category:'Cocina' },
+  { id:'p3', name:'Papas Fritas', price:7000, category:'Cocina' },
+  { id:'p4', name:'Coca-Cola 350ml', price:4000, category:'Bar' },
+  { id:'p5', name:'Mojito', price:12000, category:'Bar' },
+  { id:'p6', name:'Café', price:3000, category:'Bar' }
+];
+
+function uid(pref='id'){ return pref + Math.random().toString(36).slice(2,9); }
+function money(n){ return '$' + Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+/* ========= Persistencia ========= */
+function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderTables(); renderSelectedTable(); }
+function load(){ const v = localStorage.getItem(STORAGE_KEY); if(v){ state = JSON.parse(v); } else { state.products = demoProducts; state.tables = [ {id:'t1', name:'M1', order:{items:[], discount:0, createdAt:null}, state:'Libre'}, {id:'t2', name:'M2', order:{items:[], discount:0, createdAt:null}, state:'Libre'} ]; state.selectedTableId = null; save(); } }
+
+/* ========= Renderizado ========= */
+function renderTables(){
+  const container = document.getElementById('tablesList'); container.innerHTML = '';
+  state.tables.forEach(t=>{
+    const div = document.createElement('div');
+    div.className = 'mesa-card flex justify-between items-center';
+    div.style.background = t.id === state.selectedTableId ? '#eef2ff' : '#fff';
+    div.innerHTML = `
+      <div>
+        <div class="font-semibold">${t.name}</div>
+        <div class="small-muted">${t.order.items.length} items</div>
+      </div>
+      <div class="text-right">
+        <div class="font-medium">${money(calcSubtotal(t))}</div>
+        <div class="small-muted">${t.state}</div>
+      </div>
+    `;
+    div.onclick = ()=> { selectTable(t.id); };
+    container.appendChild(div);
+  });
+}
+
+function renderProducts(){
+  const g = document.getElementById('productsGrid'); g.innerHTML = '';
+  state.products.forEach(p=>{
+    const d = document.createElement('div');
+    d.className = 'producto panel';
+    d.innerHTML = `<div class="font-semibold">${p.name}</div><div class="small-muted">${p.category}</div><div class="mt-2 font-bold">${money(p.price)}</div>`;
+    d.onclick = ()=> addProductToSelected(p.id);
+    g.appendChild(d);
+  });
+}
+
+function renderSelectedTable(){
+  const title = document.getElementById('selectedTableTitle');
+  const stateEl = document.getElementById('selectedTableState');
+  const itemsUl = document.getElementById('orderItems');
+  const subtotalEl = document.getElementById('subtotalDisplay');
+  itemsUl.innerHTML = '';
+  if(!state.selectedTableId){ title.innerText = '— Selecciona una mesa —'; stateEl.innerText = 'Estado: —'; subtotalEl.innerText = money(0); return; }
+  const table = state.tables.find(t=>t.id===state.selectedTableId);
+  title.innerText = table.name;
+  stateEl.innerText = 'Estado: ' + table.state;
+  table.order.items.forEach((it, idx)=>{
+    const prod = state.products.find(p=>p.id===it.productId) || {name:'Producto', price:it.price};
+    const li = document.createElement('li');
+    li.className = 'flex justify-between items-center';
+    li.style.padding = '8px';
+    li.innerHTML = `<div><div class="font-medium">${prod.name}${it.mod? ' ('+it.mod+')':''}</div><div class="small-muted">${it.qty} x ${money(it.price)}</div></div>
+                    <div class="flex gap-2">
+                      <button data-idx="${idx}" class="dec px-2 py-1 border rounded">-</button>
+                      <button data-idx="${idx}" class="inc px-2 py-1 border rounded">+</button>
+                      <button data-idx="${idx}" class="del px-2 py-1 border rounded">Eliminar</button>
+                    </div>`;
+    itemsUl.appendChild(li);
+  });
+  // attach handlers
+  itemsUl.querySelectorAll('.del').forEach(b=> b.onclick = e=>{ const idx = +e.target.dataset.idx; table.order.items.splice(idx,1); if(table.order.items.length===0) table.state='Libre'; save(); renderSelectedTable();});
+  itemsUl.querySelectorAll('.dec').forEach(b=> b.onclick = e=>{ const idx = +e.target.dataset.idx; const it = table.order.items[idx]; if(it.qty>1) it.qty--; else table.order.items.splice(idx,1); if(table.order.items.length===0) table.state='Libre'; save(); renderSelectedTable();});
+  itemsUl.querySelectorAll('.inc').forEach(b=> b.onclick = e=>{ const idx = +e.target.dataset.idx; table.order.items[idx].qty++; save(); renderSelectedTable();});
+  // totals
+  const subtotal = calcSubtotal(table);
+  subtotalEl.innerText = money(subtotal);
+}
+
+/* ========= Lógica mesas y ordenes ========= */
+function createTable(name){
+  const id = uid('t');
+  state.tables.push({ id, name: name || ('Mesa ' + (state.tables.length+1)), order:{ items:[], discount:0, createdAt:null }, state:'Libre' });
+  save();
+  selectTable(id);
+}
+function selectTable(id){ state.selectedTableId = id; renderTables(); renderSelectedTable(); }
+function calcSubtotal(table){ return (table.order.items||[]).reduce((s,i)=> s + i.qty * i.price, 0); }
+
+function addProductToSelected(productId){
+  if(!state.selectedTableId){ return alert('Selecciona una mesa primero'); }
+  const table = state.tables.find(t=>t.id===state.selectedTableId);
+  const prod = state.products.find(p=>p.id===productId);
+  if(!prod) return;
+  const mod = prompt('Modificador (ej. sin cebolla) — Enter para omitir') || '';
+  const existing = table.order.items.find(it=> it.productId===productId && it.mod===mod);
+  if(existing) existing.qty++;
+  else table.order.items.push({ productId, qty:1, price: prod.price, mod });
+  table.state = 'En curso';
+  if(!table.order.createdAt) table.order.createdAt = new Date().toISOString();
+  save();
+  renderSelectedTable();
+}
+
+/* Guardar, limpiar, descuento, cobrar */
+function saveTable(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); table.state = table.order.items.length ? 'En curso' : 'Libre'; save(); alert('Mesa guardada'); }
+function clearTable(){ if(!state.selectedTableId) return; if(!confirm('Limpiar mesa y eliminar orden?')) return; const table = state.tables.find(t=>t.id===state.selectedTableId); table.order = { items:[], discount:0, createdAt:null }; table.state='Libre'; save(); renderSelectedTable(); }
+function applyDiscount(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); const v = prompt('Descuento (ej: 2000 o 10%)',''); if(v==null) return; if(String(v).includes('%')){ const perc = parseFloat(String(v).replace('%',''))/100; table.order.discount = Math.round(calcSubtotal(table) * perc); } else { const val = Number(v); if(isNaN(val)) return alert('Valor inválido'); table.order.discount = val; } save(); renderSelectedTable(); }
+function chargeTable(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); const subtotal = calcSubtotal(table); const total = Math.max(0, subtotal - (table.order.discount||0)); if(!confirm('Cobrar ' + money(total) + ' ?')) return; table.order = { items:[], discount:0, createdAt:null }; table.state = 'Libre'; save(); renderTables(); renderSelectedTable(); alert('Mesa cobrada'); }
+
+/* ========= Impresión (comandas y ticket) ========= */
+function playDing(){ const a = document.getElementById('ding'); try{ a.currentTime = 0; a.play(); }catch(e){} }
+function buildComandaHTML(table, category){
+  const items = table.order.items.filter(it=> {
+    const p = state.products.find(x=>x.id===it.productId); return p && p.category && p.category.toLowerCase()===category.toLowerCase();
+  });
+  if(!items.length) return null;
+  const h = [];
+  h.push(`<div style="font-family:Arial;max-width:320px;padding:8px">`);
+  h.push(`<h3 style="margin:0">${state.settings.name}</h3>`);
+  h.push(`<div>Comanda: ${category}</div>`);
+  h.push(`<div>Mesa: ${table.name}</div>`);
+  h.push(`<div>Fecha: ${new Date(table.order.createdAt||Date.now()).toLocaleString()}</div><hr/>`);
+  items.forEach(it=>{ const p = state.products.find(x=>x.id===it.productId); h.push(`<div style="display:flex;justify-content:space-between;margin:6px 0"><div>${it.qty} x ${p.name}${it.mod? ' ('+it.mod+')':''}</div></div>`); });
+  h.push(`<hr/><div style="font-size:12px;color:#666">* Sin precios — Para cocina/bar</div>`);
+  h.push('</div>');
+  return h.join('');
+}
+function buildTicketHTML(table){
+  const h = []; h.push(`<div style="font-family:Arial;max-width:400px;padding:8px">`); h.push(`<h2 style="margin:0">${state.settings.name}</h2>`); h.push(`<div>Mesa: ${table.name}</div>`); h.push(`<div>Fecha: ${new Date(table.order.createdAt||Date.now()).toLocaleString()}</div><hr/>`);
+  table.order.items.forEach(it=>{ const p = state.products.find(x=>x.id===it.productId); h.push(`<div style="display:flex;justify-content:space-between"><div>${it.qty} x ${p.name}${it.mod? ' ('+it.mod+')':''}</div><div>${money(it.qty*it.price)}</div></div>`); });
+  const subtotal = calcSubtotal(table);
+  h.push(`<hr/><div style="display:flex;justify-content:space-between"><div>Subtotal</div><div>${money(subtotal)}</div></div>`);
+  h.push(`<div style="display:flex;justify-content:space-between"><div>Descuento</div><div>-${money(table.order.discount||0)}</div></div>`);
+  h.push(`<div style="display:flex;justify-content:space-between;font-weight:bold"><div>Total</div><div>${money(Math.max(0, subtotal - (table.order.discount||0)))}</div></div>`);
+  h.push(`<div style="text-align:center;margin-top:8px">Gracias por su visita</div></div>`);
+  return h.join('');
+}
+function printHTML(html){
+  if(!html) return alert('No hay items para imprimir en esta plantilla');
+  playDing();
+  const w = window.open('','_blank','width=380,height=600');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  w.print();
+  setTimeout(()=> w.close(), 800);
+}
+function printKitchen(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); printHTML(buildComandaHTML(table,'Cocina')); }
+function printBar(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); printHTML(buildComandaHTML(table,'Bar')); }
+function printTicket(){ if(!state.selectedTableId) return alert('Selecciona mesa'); const table = state.tables.find(t=>t.id===state.selectedTableId); printHTML(buildTicketHTML(table)); }
+
+/* ========= Inicialización y wiring UI ========= */
+window.addEventListener('DOMContentLoaded', ()=>{
+  load();
+  renderProducts();
+  renderTables();
+  renderSelectedTable();
+
+  document.getElementById('btn-add-table').onclick = ()=>{
+    const name = document.getElementById('newTableName').value.trim();
+    if(!name) return alert('Escribe un nombre para la mesa');
+    createTable(name || undefined);
+    document.getElementById('newTableName').value='';
+  };
+  document.getElementById('btn-save-table').onclick = saveTable;
+  document.getElementById('btn-clear-table').onclick = clearTable;
+  document.getElementById('btn-discount').onclick = applyDiscount;
+  document.getElementById('btn-pay').onclick = chargeTable;
+  document.getElementById('btn-print-kitchen').onclick = printKitchen;
+  document.getElementById('btn-print-bar').onclick = printBar;
+  document.getElementById('btn-reset').onclick = ()=>{ if(confirm('Borrar datos locales y restaurar demo?')){ localStorage.removeItem(STORAGE_KEY); location.reload(); } };
+});
+
+/* Helper: createTable wrapper used in UI */
+function createTable(name){ createTable; const id = uid('t'); state.tables.push({ id, name: name || ('Mesa ' + (state.tables.length+1)), order:{ items:[], discount:0, createdAt:null }, state:'Libre' }); save(); selectTable(id); }
+
+/* Ensure product rendering function available globally */
+function renderProducts(){ const grid = document.getElementById('productsGrid'); grid.innerHTML=''; state.products.forEach(p=>{ const el = document.createElement('div'); el.className='producto'; el.style.background='#fff'; el.innerHTML = `<div class="font-semibold">${p.name}</div><div class="small-muted">${p.category}</div><div class="mt-2 font-bold">${money(p.price)}</div>`; el.onclick = ()=> addProductToSelected(p.id); grid.appendChild(el); }); }
+
+</script>
+</body>
+</html>
