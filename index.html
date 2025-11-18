@@ -1,292 +1,1062 @@
-<!doctype html>
-<html lang="es">
+import React, { useState } from 'react';
+import { Search, Trash2, Plus, Minus, Receipt, ChefHat, FileText, TrendingUp, Settings, Home, ShoppingCart, Calculator, DollarSign, Menu, X, Database, Percent, Users, Gift, Printer } from 'lucide-react';
+
+const RestaurantPOS = () => {
+  const [currentView, setCurrentView] = useState('pos');
+  const [selectedCategory, setSelectedCategory] = useState('Todo');
+  const [cart, setCart] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [orderType, setOrderType] = useState('Mesa');
+  const [tableNumber, setTableNumber] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [orders, setOrders] = useState([]);
+  const [activeTables, setActiveTables] = useState([]);
+  const [completedOrders, setCompletedOrders] = useState([]);
+  const [dailySales, setDailySales] = useState([]);
+  const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [googleSheetUrl, setGoogleSheetUrl] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [discountType, setDiscountType] = useState('none');
+  const [discountValue, setDiscountValue] = useState(0);
+  const [tipPercent, setTipPercent] = useState(0);
+  const [showSplitBill, setShowSplitBill] = useState(false);
+  const [splitPeople, setSplitPeople] = useState(2);
+  const [inventory, setInventory] = useState([]);
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [inventoryAction, setInventoryAction] = useState('entrada');
+
+  const categories = ['Todo', 'Entradas', 'Platos Fuertes', 'Bebidas', 'Postres'];
+
+  const menuItems = [
+    { id: 1, name: 'Ceviche de Camaron', category: 'Entradas', price: 28000, sku: 'ENT-001' },
+    { id: 2, name: 'Empanadas', category: 'Entradas', price: 12000, sku: 'ENT-002' },
+    { id: 3, name: 'Patacones', category: 'Entradas', price: 15000, sku: 'ENT-003' },
+    { id: 4, name: 'Bandeja Paisa', category: 'Platos Fuertes', price: 35000, sku: 'PLT-001' },
+    { id: 5, name: 'Pescado Frito', category: 'Platos Fuertes', price: 32000, sku: 'PLT-002' },
+    { id: 6, name: 'Arroz con Pollo', category: 'Platos Fuertes', price: 28000, sku: 'PLT-003' },
+    { id: 7, name: 'Sancocho', category: 'Platos Fuertes', price: 25000, sku: 'PLT-004' },
+    { id: 8, name: 'Limonada', category: 'Bebidas', price: 6000, sku: 'BEB-001' },
+    { id: 9, name: 'Jugo Natural', category: 'Bebidas', price: 7000, sku: 'BEB-002' },
+    { id: 10, name: 'Cerveza', category: 'Bebidas', price: 8000, sku: 'BEB-003' },
+    { id: 11, name: 'Agua', category: 'Bebidas', price: 3000, sku: 'BEB-004' },
+    { id: 12, name: 'Tres Leches', category: 'Postres', price: 12000, sku: 'POS-001' },
+    { id: 13, name: 'Flan', category: 'Postres', price: 10000, sku: 'POS-002' },
+  ];
+
+  const filteredItems = menuItems.filter(item => {
+    const matchesCategory = selectedCategory === 'Todo' || item.category === selectedCategory;
+    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const sendToGoogleSheets = async (data, type) => {
+    if (!googleSheetUrl) return;
+    try {
+      await fetch(googleSheetUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: type, data: data, timestamp: new Date().toISOString() })
+      });
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  const addToCart = (item) => {
+    const existingItem = cart.find(cartItem => cartItem.id === item.id);
+    if (existingItem) {
+      setCart(cart.map(cartItem =>
+        cartItem.id === item.id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
+      ));
+    } else {
+      setCart([...cart, { ...item, quantity: 1 }]);
+    }
+  };
+
+  const updateQuantity = (id, change) => {
+    setCart(cart.map(item =>
+      item.id === id ? { ...item, quantity: Math.max(0, item.quantity + change) } : item
+    ).filter(item => item.quantity > 0));
+  };
+
+  const removeFromCart = (id) => {
+    setCart(cart.filter(item => item.id !== id));
+  };
+
+  const getSubtotal = () => cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  const getDiscount = () => {
+    const subtotal = getSubtotal();
+    if (discountType === 'percent') return Math.round(subtotal * (discountValue / 100));
+    if (discountType === 'fixed') return discountValue;
+    return 0;
+  };
+
+  const getSubtotalAfterDiscount = () => getSubtotal() - getDiscount();
+  const getIVA = () => Math.round(getSubtotalAfterDiscount() * 0.19);
+  const getTip = () => Math.round(getSubtotalAfterDiscount() * (tipPercent / 100));
+  const getTotal = () => getSubtotalAfterDiscount() + getIVA() + getTip();
+  const getSplitAmount = () => Math.round(getTotal() / splitPeople);
+
+  const clearCart = () => {
+    setCart([]);
+    setTableNumber('');
+    setCustomerName('');
+    setDiscountType('none');
+    setDiscountValue(0);
+    setTipPercent(0);
+    setShowSplitBill(false);
+    setSplitPeople(2);
+  };
+
+  const generateOrderNumber = () => 'ORD-' + Date.now().toString().slice(-8);
+  const generateInvoiceNumber = () => 'SETT' + (completedOrders.length + 1).toString().padStart(8, '0');
+
+  const printComandaPDF = (order) => {
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    if (!printWindow) {
+      alert('Por favor permite ventanas emergentes para imprimir');
+      return;
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>POS — Réplica Cuenti (Mock)</title>
+  <meta charset="UTF-8">
+  <title>Comanda - ${order.orderNumber}</title>
   <style>
-    :root{--bg:#f3f6fb;--card:#ffffff;--accent:#0b63c6;--muted:#6b7280;--success:#16a34a;--danger:#ef4444}
-    *{box-sizing:border-box}
-    body{margin:0;font-family:Inter,Segoe UI,Arial;background:var(--bg);color:#0f1724}
-    .wrap{display:grid;grid-template-columns:300px 1fr 420px;gap:16px;padding:16px;height:100vh}
-    .card{background:var(--card);border-radius:10px;padding:12px;box-shadow:0 1px 4px rgba(16,24,40,0.05);display:flex;flex-direction:column}
-    .brand{font-weight:700;color:var(--accent);font-size:18px}
-    .small{font-size:13px;color:var(--muted)}
-    /* Left: mesas */
-    #mesasGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-    .mesa{padding:10px;border-radius:8px;border:1px solid #e6eef8;cursor:pointer;background:#fff}
-    .mesa.occ{border-color:#f59e0b;background:#fff7e6}
-    /* Center: productos */
-    #controls{display:flex;gap:8px;align-items:center}
-    #cats{display:flex;gap:6px;overflow:auto;margin-top:8px}
-    .cat{padding:6px 10px;border-radius:999px;background:#eef2ff;border:1px solid #e6edff;cursor:pointer;font-size:13px}
-    .cat.active{background:var(--accent);color:#fff}
-    #products{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px;overflow:auto}
-    .prod{background:#fff;padding:10px;border-radius:8px;border:1px solid #e9f0ff;cursor:pointer;display:flex;flex-direction:column;gap:6px;align-items:center}
-    .prod img{width:100%;height:90px;object-fit:cover;border-radius:6px}
-    .prodName{font-weight:600}
-    .prodPrice{color:var(--muted);font-size:13px}
-    /* Right: carrito */
-    #cartList{overflow:auto;max-height:60vh;margin-top:8px}
-    .line{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f3f6fb}
-    .qty{display:inline-block;padding:4px 8px;border-radius:6px;background:#f3f6fb}
-    .row-actions{display:flex;gap:6px}
-
-    .footer-actions{display:flex;gap:8px;margin-top:10px}
-    .btn{padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
-    .btn.primary{background:var(--accent);color:#fff}
-    .btn.success{background:var(--success);color:#fff}
-    .btn.ghost{background:transparent;border:1px solid #e6eef8}
-
-    /* Modal */
-    #modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center}
-    #modal .box{background:#fff;padding:14px;border-radius:8px;width:520px;max-height:80vh;overflow:auto}
-    pre{white-space:pre-wrap;word-break:break-word}
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Courier New', monospace; 
+      padding: 20px; 
+      font-size: 14px;
+    }
+    .header { 
+      text-align: center; 
+      border-bottom: 3px solid #000; 
+      padding-bottom: 15px; 
+      margin-bottom: 15px; 
+    }
+    .header h1 { 
+      font-size: 24px; 
+      margin-bottom: 5px; 
+    }
+    .info { 
+      margin: 15px 0; 
+      font-size: 14px;
+    }
+    .info-row { 
+      margin: 8px 0; 
+      display: flex;
+      justify-content: space-between;
+    }
+    .items { 
+      margin: 20px 0; 
+    }
+    .items-header {
+      font-weight: bold;
+      border-bottom: 2px solid #000;
+      padding: 8px 0;
+      display: flex;
+      justify-content: space-between;
+    }
+    .item { 
+      border-bottom: 1px dashed #666; 
+      padding: 12px 0; 
+    }
+    .item-line {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .item-name { 
+      font-weight: bold; 
+      font-size: 16px;
+    }
+    .item-qty { 
+      font-weight: bold; 
+      font-size: 18px;
+      color: #000;
+    }
+    .item-category {
+      font-size: 12px;
+      color: #666;
+      margin-left: 10px;
+    }
+    .footer { 
+      margin-top: 30px; 
+      text-align: center; 
+      border-top: 3px solid #000; 
+      padding-top: 15px; 
+    }
+    .footer p {
+      font-weight: bold;
+      font-size: 16px;
+      margin: 5px 0;
+    }
+    @media print {
+      body { padding: 10px; }
+      @page { size: 80mm auto; margin: 5mm; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <!-- Left -->
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div class="brand">Cuenti - Mock POS</div>
-          <div class="small">Réplica rápida — Mock facturación</div>
-        </div>
-        <div class="small">v1</div>
-      </div>
-
-      <div style="margin-top:12px"><strong>Mesas / Puntos</strong></div>
-      <div id="mesasGrid"></div>
-
-      <div style="margin-top:12px"><input id="newMesa" placeholder="Nombre mesa" style="width:100%;padding:8px;border-radius:6px;border:1px solid #e6eef8"/></div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button id="addMesaBtn" class="btn primary">Agregar mesa</button>
-        <button id="resetBtn" class="btn ghost">Reset</button>
-      </div>
-
-      <div style="margin-top:12px" class="small">Buscar mesas</div>
-      <input id="searchMesa" placeholder="Buscar..." style="width:100%;padding:8px;border-radius:6px;border:1px solid #e6eef8;margin-top:6px" />
+  <div class="header">
+    <h1>COMANDA DE COCINA</h1>
+    <p>RESTAURANTE SABOR CARIBE</p>
+  </div>
+  
+  <div class="info">
+    <div class="info-row">
+      <strong>Orden:</strong>
+      <span>${order.orderNumber}</span>
     </div>
-
-    <!-- Center -->
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-weight:700;font-size:16px">Productos</div>
-          <div class="small">Inventario y menú</div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <input id="searchProd" placeholder="Buscar producto..." style="padding:8px;border-radius:6px;border:1px solid #e6eef8" />
-          <button id="demoBtn" class="btn ghost">Demo</button>
-        </div>
-      </div>
-
-      <div id="cats"></div>
-      <div id="products"></div>
+    <div class="info-row">
+      <strong>Fecha:</strong>
+      <span>${new Date().toLocaleDateString()}</span>
     </div>
-
-    <!-- Right -->
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div><strong>Carrito</strong><div class="small" id="tableLabel">Mesa: -</div></div>
-        <div class="small" id="orderCount">0 items</div>
-      </div>
-
-      <div id="cartList"></div>
-
-      <div style="margin-top:8px">
-        <div style="display:flex;justify-content:space-between"><div class="small">Subtotal</div><div id="subtotal">$0</div></div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px"><div class="small">Propina %</div><input id="tipPct" type="number" min="0" max="100" value="0" style="width:80px;padding:6px;border-radius:6px;border:1px solid #e6eef8" onchange="updateTotals()"/></div>
-        <div style="display:flex;justify-content:space-between;margin-top:8px;font-weight:700"><div>Total</div><div id="grandTotal">$0</div></div>
-      </div>
-
-      <div class="footer-actions">
-        <button id="factBtn" class="btn primary">Emitir factura (mock)</button>
-        <button id="checkoutBtn" class="btn success">Cobrar</button>
-        <button id="reportsBtn" class="btn ghost">Reportes</button>
-      </div>
+    <div class="info-row">
+      <strong>Hora:</strong>
+      <span>${new Date().toLocaleTimeString()}</span>
     </div>
+    <div class="info-row">
+      <strong>Tipo:</strong>
+      <span>${order.orderType}</span>
+    </div>
+    ${order.table ? `
+    <div class="info-row">
+      <strong>MESA:</strong>
+      <span style="font-size: 20px; font-weight: bold;">${order.table}</span>
+    </div>
+    ` : ''}
+    ${order.customer ? `
+    <div class="info-row">
+      <strong>Cliente:</strong>
+      <span>${order.customer}</span>
+    </div>
+    ` : ''}
+  </div>
+  
+  <div class="items">
+    <div class="items-header">
+      <span>PRODUCTO</span>
+      <span>CANT</span>
+    </div>
+    ${order.items.map(item => `
+      <div class="item">
+        <div class="item-line">
+          <span class="item-name">${item.name}</span>
+          <span class="item-qty">${item.quantity}x</span>
+        </div>
+        <div class="item-category">${item.category || ''}</div>
+      </div>
+    `).join('')}
+  </div>
+  
+  <div class="footer">
+    <p>*** PREPARAR INMEDIATAMENTE ***</p>
+    <p>${new Date().toLocaleString()}</p>
   </div>
 
-  <!-- Modal -->
-  <div id="modal"><div class="box" id="modalBox"></div></div>
-
   <script>
-    // Simple POS inspired by Cuenti — mock electronic invoice generator
-    const STORAGE_KEY = 'pos_cuenti_mock_v1';
-    const state = { mesas: [], categorias: [], productos: [], pedidos: {}, ventas: [] };
-
-    function save(){localStorage.setItem(STORAGE_KEY, JSON.stringify(state))}
-    function load(){ const s = localStorage.getItem(STORAGE_KEY); if(s) Object.assign(state, JSON.parse(s)); else initDemo(); }
-
-    function initDemo(){
-      state.categorias = ['Comidas','Bebidas','Postres'];
-      state.productos = [
-        {id:gid(),name:'Hamburguesa Doble',price:16000,cat:'Comidas',stock:20},
-        {id:gid(),name:'Pizza Familiar',price:28000,cat:'Comidas',stock:8},
-        {id:gid(),name:'Gaseosa 500ml',price:4500,cat:'Bebidas',stock:30},
-        {id:gid(),name:'Cerveza',price:8000,cat:'Bebidas',stock:40},
-        {id:gid(),name:'Helado',price:6000,cat:'Postres',stock:15}
-      ];
-      state.mesas = ['Mesa 1','Mesa 2','Mesa 3','Caja'];
-      state.pedidos = {};
-      state.ventas = [];
-      save();
-    }
-
-    function gid(){return 'x'+Math.random().toString(36).slice(2,9)}
-
-    // Rendering
-    const mesasGrid = () => document.getElementById('mesasGrid');
-    const productsEl = () => document.getElementById('products');
-    const catsEl = () => document.getElementById('cats');
-    const cartList = () => document.getElementById('cartList');
-    let activeMesa = null;
-    let activeCat = null;
-
-    function renderMesas(){
-      const grid = mesasGrid();
-      grid.innerHTML='';
-      const q=document.getElementById('searchMesa').value.toLowerCase();
-      state.mesas.filter(m=>m.toLowerCase().includes(q)).forEach(m=>{
-        const occ = (state.pedidos[m] && state.pedidos[m].length>0);
-        const div = document.createElement('div');
-        div.className = 'mesa' + (occ? ' occ':'');
-        div.innerHTML = `<div style="font-weight:600">${m}</div><div class="small">${occ? state.pedidos[m].length + ' ítems - $'+sum(m): 'Libre'}</div>`;
-        div.onclick = ()=>{ activeMesa = m; document.getElementById('tableLabel').textContent = 'Mesa: '+m; renderCart(); };
-        grid.appendChild(div);
-      });
-    }
-
-    function renderCats(){
-      const el = catsEl();
-      el.innerHTML='';
-      state.categorias.forEach(c=>{
-        const b=document.createElement('div');
-        b.className='cat'+(c===activeCat?' active':'');
-        b.textContent = c;
-        b.onclick = ()=>{ activeCat=c; renderProducts(); renderCats(); };
-        el.appendChild(b);
-      });
-    }
-
-    function renderProducts(){
-      const el = productsEl();
-      el.innerHTML='';
-      const term = document.getElementById('searchProd').value.toLowerCase();
-      state.productos.filter(p=> (activeCat? p.cat===activeCat:true) && p.name.toLowerCase().includes(term)).forEach(p=>{
-        const d=document.createElement('div');
-        d.className='prod';
-        d.innerHTML = `<div style="font-weight:600">${p.name}</div><div class="small">${p.cat} • Stock: ${p.stock||0}</div><div style="margin-top:6px;font-weight:700">$${p.price}</div>`;
-        d.onclick = ()=> addToCart(p.id);
-        el.appendChild(d);
-      });
-    }
-
-    function addMesa(){ const v = document.getElementById('newMesa').value.trim(); if(!v) return alert('Ingrese nombre de la mesa'); state.mesas.push(v); document.getElementById('newMesa').value=''; save(); renderMesas(); }
-
-    function seedProducts(){ initDemo(); load(); renderAll(); }
-    function resetDemo(){ if(confirm('Resetear demo?')){ localStorage.removeItem(STORAGE_KEY); initDemo(); load(); renderAll(); } }
-
-    function addToCart(pid){ if(!activeMesa) return alert('Selecciona una mesa'); const prod = state.productos.find(x=>x.id===pid); if(!prod) return; if(prod.stock<=0) return alert('Sin stock'); if(!state.pedidos[activeMesa]) state.pedidos[activeMesa]=[]; const ex = state.pedidos[activeMesa].find(i=>i.id===pid); if(ex){ ex.qty++; } else { state.pedidos[activeMesa].push({ id:prod.id, name:prod.name, price:prod.price, qty:1 }); } prod.stock--; save(); renderCart(); renderMesas(); }
-
-    function renderCart(){ const el = cartList(); el.innerHTML=''; if(!activeMesa){ el.innerHTML = '<div class="small">Seleccione mesa</div>'; document.getElementById('orderCount').textContent='0 items'; updateTotals(); return; } const items = state.pedidos[activeMesa]||[]; if(!items.length){ el.innerHTML = '<div class="small">Carrito vacío</div>'; document.getElementById('orderCount').textContent='0 items'; updateTotals(); return; } items.forEach((it,idx)=>{ const row = document.createElement('div'); row.className='line'; row.innerHTML = `<div><div style="font-weight:600">${it.name}</div><div class="small">x${it.qty}</div></div><div style="display:flex;gap:8px;align-items:center"><div>$${it.price*it.qty}</div><div class="row-actions"><button class="btn" onclick="inc(${idx})">+</button><button class="btn" onclick="dec(${idx})">-</button><button class="btn" onclick="removeItem(${idx})">x</button></div></div>`; el.appendChild(row); }); document.getElementById('orderCount').textContent = items.reduce((s,i)=>s+i.qty,0) + ' items'; updateTotals(); }
-
-    function inc(idx){ const items = state.pedidos[activeMesa]; const item = items[idx]; const prod = state.productos.find(p=>p.id===item.id); if(prod.stock<=0) return alert('Sin stock'); item.qty++; prod.stock--; save(); renderCart(); renderMesas(); }
-    function dec(idx){ const items = state.pedidos[activeMesa]; const item = items[idx]; const prod = state.productos.find(p=>p.id===item.id); if(item.qty>1){ item.qty--; prod.stock++; } else { // remove
-      prod.stock += item.qty; items.splice(idx,1);
-    } save(); renderCart(); renderMesas(); }
-    function removeItem(idx){ const items = state.pedidos[activeMesa]; const item = items[idx]; const prod = state.productos.find(p=>p.id===item.id); prod.stock += item.qty; items.splice(idx,1); save(); renderCart(); renderMesas(); }
-
-    function sum(m){ const it = state.pedidos[m]||[]; return it.reduce((s,i)=>s + i.price*i.qty, 0); }
-    function updateTotals(){ const items = state.pedidos[activeMesa]||[]; const sub = items.reduce((s,i)=>s + i.price*i.qty, 0); document.getElementById('subtotal').textContent = '$' + sub; const tip = Number(document.getElementById('tipPct').value||0); const total = Math.round(sub * (1 + tip/100)); document.getElementById('grandTotal').textContent = '$' + total; }
-
-    // Mock factura electrónica: generate structured JSON and allow download/print
-    function mockFactura(){
-      if(!activeMesa) return alert('Seleccione mesa');
-      const items = state.pedidos[activeMesa]||[];
-      if(!items.length) return alert('Carrito vacío');
-      const tip = Number(document.getElementById('tipPct').value||0);
-      const sub = items.reduce((s,i)=>s + i.price*i.qty, 0);
-      const total = Math.round(sub * (1 + tip/100));
-
-      const factura = {
-        id: 'FAC-'+gid().toUpperCase().slice(2,10),
-        fecha: new Date().toISOString(),
-        mesa: activeMesa,
-        items: JSON.parse(JSON.stringify(items)),
-        subtotal: sub,
-        propinaPct: tip,
-        total
-      };
-
-      // Build modal content using DOM methods (safer than concatenated strings)
-      const box = document.getElementById('modalBox');
-      box.innerHTML = '';
-
-      const header = document.createElement('div');
-      header.style.display = 'flex';
-      header.style.justifyContent = 'space-between';
-      header.style.alignItems = 'center';
-
-      const hTitle = document.createElement('div');
-      hTitle.innerHTML = '<strong>Factura simulada</strong>';
-      const hClose = document.createElement('div');
-      const btnClose = document.createElement('button'); btnClose.className = 'btn ghost'; btnClose.textContent = 'Cerrar'; btnClose.onclick = closeModal;
-      hClose.appendChild(btnClose);
-      header.appendChild(hTitle); header.appendChild(hClose);
-
-      const pre = document.createElement('pre');
-      pre.textContent = JSON.stringify(factura, null, 2);
-
-      const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px'; actions.style.marginTop = '8px';
-      const btnDownload = document.createElement('button'); btnDownload.className = 'btn primary'; btnDownload.textContent = 'Descargar JSON'; btnDownload.onclick = ()=> downloadFacturaObj(factura);
-      const btnPrint = document.createElement('button'); btnPrint.className = 'btn'; btnPrint.textContent = 'Imprimir'; btnPrint.onclick = ()=> printFacturaObj(factura);
-      actions.appendChild(btnDownload); actions.appendChild(btnPrint);
-
-      box.appendChild(header); box.appendChild(pre); box.appendChild(actions);
-      document.getElementById('modal').style.display = 'flex';
-    }
-
-    function downloadFacturaObj(obj){ const data = JSON.stringify(obj, null, 2); const blob = new Blob([data], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = (obj.id || 'factura') + '.json'; a.click(); URL.revokeObjectURL(url); }
-
-    function printFacturaObj(obj){ const w = window.open('','_blank'); if(!w) return alert('El navegador bloqueó la ventana emergente. Permite ventanas emergentes para imprimir.'); w.document.open(); w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Factura '+(obj.id||'')+'</title></head><body><pre id="ct"></pre></body></html>'); w.document.close(); try{ w.document.getElementById('ct').textContent = JSON.stringify(obj, null, 2); } catch(e){ /* fallback */ w.document.body.innerText = JSON.stringify(obj, null, 2); } w.focus(); w.print(); }
-
-    function closeModal(){ document.getElementById('modal').style.display='none'; }
-
-    // Checkout: register sale, clear order, keep sale in history
-    function checkout(){ if(!activeMesa) return alert('Seleccione mesa'); const items = state.pedidos[activeMesa]||[]; if(!items.length) return alert('Carrito vacío'); const tip = Number(document.getElementById('tipPct').value||0); const sub = items.reduce((s,i)=>s + i.price*i.qty, 0); const total = Math.round(sub * (1 + tip/100)); const venta = { id: gid(), mesa: activeMesa, items: JSON.parse(JSON.stringify(items)), subtotal: sub, tipPct: tip, total, fecha: new Date().toISOString() }; state.ventas.push(venta); // clear
-      state.pedidos[activeMesa] = []; save(); renderCart(); renderMesas(); alert('Venta registrada $'+total); }
-
-    // Reports
-    function showReports(){ const box = document.getElementById('modalBox'); let html = '<div style="display:flex;justify-content:space-between;align-items:center"><div><strong>Reportes</strong></div><div><button class="btn ghost" onclick="closeModal()">Cerrar</button></div></div><table style="width:100%;border-collapse:collapse;margin-top:8px"><tr><th>Mesa</th><th>Total</th><th>Fecha</th></tr>';
-      state.ventas.forEach(v=>{ html += `<tr><td style="padding:8px">${v.mesa}</td><td style="padding:8px">$${v.total}</td><td style="padding:8px">${new Date(v.fecha).toLocaleString()}</td></tr>` }); html += '</table><div style="display:flex;gap:8px;margin-top:8px"><button class="btn primary" onclick="exportSales()">Exportar CSV</button></div>';
-      box.innerHTML = html; document.getElementById('modal').style.display = 'flex'; }
-
-    function exportSales(){ if(!state.ventas.length) return alert('No hay ventas'); let csv = 'id,mesa,total,fecha
-'; state.ventas.forEach(v=> csv += `${v.id},"${v.mesa}",${v.total},${v.fecha}
-`); const blob = new Blob([csv], {type:'text/csv'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'ventas.csv'; a.click(); URL.revokeObjectURL(url); }
-
-    // Utilities
-    function sumAll(){ return state.mesas.reduce((s,m)=> s + (sum(m)||0), 0); }
-
-    // Init + helpers
-    function renderAll(){ renderMesas(); renderProducts(); renderCart(); renderCats(); }
-
-    load(); renderAll();
-
-    // Attach event listeners (avoid inline onclick pitfalls)
-    document.getElementById('addMesaBtn').addEventListener('click', addMesa);
-    document.getElementById('resetBtn').addEventListener('click', resetDemo);
-    document.getElementById('searchMesa').addEventListener('input', renderMesas);
-    document.getElementById('demoBtn').addEventListener('click', seedProducts);
-    document.getElementById('searchProd').addEventListener('input', renderProducts);
-    document.getElementById('factBtn').addEventListener('click', mockFactura);
-    document.getElementById('checkoutBtn').addEventListener('click', checkout);
-    document.getElementById('reportsBtn').addEventListener('click', showReports);
-
+    window.onload = function() {
+      window.print();
+      setTimeout(function() {
+        window.close();
+      }, 100);
+    };
   </script>
 </body>
 </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  const printInvoicePDF = (invoice) => {
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      alert('Por favor permite ventanas emergentes para imprimir');
+      return;
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Factura - ${invoice.invoiceNumber}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: Arial, sans-serif; 
+      padding: 40px; 
+      max-width: 900px; 
+      margin: 0 auto; 
+    }
+    .header { 
+      text-align: center; 
+      border-bottom: 3px solid #1e40af; 
+      padding-bottom: 20px; 
+      margin-bottom: 25px; 
+    }
+    .header h1 { 
+      color: #1e40af; 
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    .company-info { 
+      font-size: 13px; 
+      line-height: 1.6;
+      color: #333;
+    }
+    .invoice-info { 
+      display: flex; 
+      justify-content: space-between; 
+      margin: 25px 0; 
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 5px;
+    }
+    .invoice-info div { 
+      line-height: 1.8;
+    }
+    .customer-info { 
+      background: #e3f2fd; 
+      padding: 15px; 
+      border-radius: 5px; 
+      margin: 20px 0; 
+      border-left: 4px solid #1e40af;
+    }
+    .customer-info p {
+      margin: 5px 0;
+      line-height: 1.6;
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin: 25px 0; 
+    }
+    th { 
+      background: #1e40af; 
+      color: white; 
+      padding: 12px; 
+      text-align: left; 
+      font-weight: 600;
+    }
+    td { 
+      padding: 12px; 
+      border-bottom: 1px solid #e0e0e0; 
+    }
+    tr:hover td { 
+      background: #f5f5f5; 
+    }
+    .item-sku {
+      font-size: 11px;
+      color: #666;
+      margin-top: 3px;
+    }
+    .totals { 
+      margin-top: 30px; 
+      text-align: right; 
+    }
+    .totals-row { 
+      display: flex; 
+      justify-content: flex-end; 
+      margin: 8px 0; 
+      font-size: 15px;
+    }
+    .totals-label { 
+      width: 180px; 
+      font-weight: 600; 
+      text-align: right;
+      padding-right: 20px;
+    }
+    .totals-value { 
+      width: 140px; 
+      text-align: right; 
+    }
+    .discount-row {
+      color: #16a34a;
+    }
+    .tip-row {
+      color: #2563eb;
+    }
+    .total-final { 
+      font-size: 22px; 
+      color: #16a34a; 
+      border-top: 3px solid #000; 
+      padding-top: 12px; 
+      margin-top: 12px;
+      font-weight: bold;
+    }
+    .footer { 
+      margin-top: 40px; 
+      text-align: center; 
+      border-top: 3px solid #000; 
+      padding-top: 20px; 
+    }
+    .footer p {
+      margin: 8px 0;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .footer .thanks {
+      font-size: 16px;
+      font-weight: bold;
+      margin-top: 15px;
+      color: #1e40af;
+    }
+    @media print {
+      body { padding: 20px; }
+      @page { size: A4; margin: 15mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>FACTURA ELECTRONICA DE VENTA</h1>
+    <div class="company-info">
+      <strong>RESTAURANTE SABOR CARIBE</strong><br>
+      NIT: 900.123.456-7 | Regimen Comun - Responsable de IVA<br>
+      Direccion: Calle 72 #45-23, Barranquilla<br>
+      Telefono: (605) 123-4567 | www.saborcaribe.com
+    </div>
+  </div>
+  
+  <div class="invoice-info">
+    <div>
+      <strong>FACTURA No:</strong> ${invoice.invoiceNumber}<br>
+      <strong>Orden No:</strong> ${invoice.orderNumber || 'N/A'}
+    </div>
+    <div style="text-align: right;">
+      <strong>Fecha:</strong> ${invoice.date || new Date().toLocaleDateString()}<br>
+      <strong>Hora:</strong> ${invoice.time || new Date().toLocaleTimeString()}
+    </div>
+  </div>
+
+  <div class="customer-info">
+    <p><strong>CLIENTE:</strong> ${invoice.customer || 'Cliente General'}</p>
+    ${invoice.table ? `<p><strong>Mesa:</strong> ${invoice.table}</p>` : ''}
+    <p><strong>Metodo de Pago:</strong> ${invoice.paymentMethod || 'Efectivo'}</p>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 60px;">CANT</th>
+        <th>DESCRIPCION</th>
+        <th style="width: 120px; text-align: right;">PRECIO UNIT</th>
+        <th style="width: 120px; text-align: right;">TOTAL</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${invoice.items.map(item => `
+        <tr>
+          <td style="font-weight: bold; font-size: 16px;">${item.quantity}</td>
+          <td>
+            ${item.name}
+            <div class="item-sku">SKU: ${item.sku}</div>
+          </td>
+          <td style="text-align: right;">${item.price.toLocaleString()}</td>
+          <td style="text-align: right; font-weight: bold;">${(item.price * item.quantity).toLocaleString()}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <div class="totals-row">
+      <div class="totals-label">Subtotal:</div>
+      <div class="totals-value">${invoice.subtotal.toLocaleString()}</div>
+    </div>
+    ${invoice.discount > 0 ? `
+      <div class="totals-row discount-row">
+        <div class="totals-label">Descuento:</div>
+        <div class="totals-value">-${invoice.discount.toLocaleString()}</div>
+      </div>
+    ` : ''}
+    <div class="totals-row">
+      <div class="totals-label">IVA (19%):</div>
+      <div class="totals-value">${invoice.iva.toLocaleString()}</div>
+    </div>
+    ${invoice.tip > 0 ? `
+      <div class="totals-row tip-row">
+        <div class="totals-label">Propina:</div>
+        <div class="totals-value">${invoice.tip.toLocaleString()}</div>
+      </div>
+    ` : ''}
+    <div class="totals-row total-final">
+      <div class="totals-label">TOTAL A PAGAR:</div>
+      <div class="totals-value">${invoice.total.toLocaleString()}</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p><strong>REPRESENTACION GRAFICA DIAN</strong></p>
+    <p>Resolucion DIAN 18764019583521 del 2024-01-01 al 2025-12-31</p>
+    <p>Prefijo: SETT - Rango: Del SETT00000001 al SETT99999999</p>
+    <p class="thanks">¡Gracias por su visita!</p>
+    <p>Software POS v1.0 - Cumple requisitos DIAN</p>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 500);
+    };
+  </script>
+</body>
+</html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  const handleSaveTable = async () => {
+    if (cart.length === 0) {
+      alert('El carrito esta vacio');
+      return;
+    }
+    if (orderType === 'Mesa' && !tableNumber) {
+      alert('Ingrese numero de mesa');
+      return;
+    }
+    const tableOrder = {
+      orderNumber: generateOrderNumber(),
+      items: [...cart],
+      orderType,
+      table: tableNumber,
+      customer: customerName,
+      subtotal: getSubtotal(),
+      discount: getDiscount(),
+      iva: getIVA(),
+      tip: getTip(),
+      total: getTotal(),
+      paymentMethod,
+      date: new Date().toLocaleDateString(),
+      time: new Date().toLocaleTimeString(),
+      status: 'Activa'
+    };
+    setActiveTables([...activeTables, tableOrder]);
+    await sendToGoogleSheets(tableOrder, 'mesa_activa');
+    alert('Mesa guardada exitosamente');
+    clearCart();
+  };
+
+  const handleSendToKitchen = async () => {
+    if (cart.length === 0) {
+      alert('El carrito esta vacio');
+      return;
+    }
+    const newOrder = {
+      orderNumber: generateOrderNumber(),
+      items: [...cart],
+      orderType,
+      table: tableNumber,
+      customer: customerName,
+      timestamp: new Date().toLocaleString(),
+      status: 'En cocina'
+    };
+    setOrders([...orders, newOrder]);
+    await sendToGoogleSheets(newOrder, 'comanda');
+    printComandaPDF(newOrder);
+    alert('Comanda enviada e impresa');
+  };
+
+  const handleProcessOrder = async () => {
+    if (cart.length === 0) {
+      alert('El carrito esta vacio');
+      return;
+    }
+    const invoice = {
+      invoiceNumber: generateInvoiceNumber(),
+      orderNumber: generateOrderNumber(),
+      items: [...cart],
+      orderType,
+      table: tableNumber,
+      customer: customerName || 'Cliente General',
+      subtotal: getSubtotal(),
+      discount: getDiscount(),
+      iva: getIVA(),
+      tip: getTip(),
+      total: getTotal(),
+      paymentMethod,
+      date: new Date().toLocaleDateString(),
+      time: new Date().toLocaleTimeString()
+    };
+    setCompletedOrders([...completedOrders, invoice]);
+    setDailySales([...dailySales, invoice]);
+    await sendToGoogleSheets(invoice, 'factura');
+    printInvoicePDF(invoice);
+    alert('Factura generada e impresa');
+    clearCart();
+  };
+
+  const handleLoadTable = (table) => {
+    setCart(table.items);
+    setTableNumber(table.table);
+    setCustomerName(table.customer);
+    setCurrentView('pos');
+  };
+
+  const handleCloseTable = async (table) => {
+    const invoice = { ...table, invoiceNumber: generateInvoiceNumber(), status: 'Pagada' };
+    setCompletedOrders([...completedOrders, invoice]);
+    setDailySales([...dailySales, invoice]);
+    setActiveTables(activeTables.filter(t => t.orderNumber !== table.orderNumber));
+    await sendToGoogleSheets(invoice, 'factura');
+    printInvoicePDF(invoice);
+    alert('Mesa cerrada y facturada');
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-gray-100">
+      <div className="bg-blue-600 text-white shadow-lg">
+        <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center gap-2">
+            <Receipt size={20} />
+            <h1 className="font-bold">POS Sabor Caribe</h1>
+          </div>
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden">
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+        <div className={'border-t border-blue-500 ' + (mobileMenuOpen ? 'block' : 'hidden lg:block')}>
+          <div className="flex flex-col lg:flex-row px-4">
+            <button onClick={() => {setCurrentView('pos'); setMobileMenuOpen(false);}} className={'flex items-center gap-2 px-3 py-2 text-sm font-semibold ' + (currentView === 'pos' ? 'bg-blue-700' : 'hover:bg-blue-500')}>
+              <Home size={16} />POS
+            </button>
+            <button onClick={() => {setCurrentView('tables'); setMobileMenuOpen(false);}} className={'flex items-center gap-2 px-3 py-2 text-sm font-semibold ' + (currentView === 'tables' ? 'bg-blue-700' : 'hover:bg-blue-500')}>
+              <ShoppingCart size={16} />Mesas {activeTables.length > 0 && <span className="bg-purple-500 px-1.5 py-0.5 rounded-full text-xs">{activeTables.length}</span>}
+            </button>
+            <button onClick={() => {setCurrentView('kitchen'); setMobileMenuOpen(false);}} className={'flex items-center gap-2 px-3 py-2 text-sm font-semibold ' + (currentView === 'kitchen' ? 'bg-blue-700' : 'hover:bg-blue-500')}>
+              <ChefHat size={16} />Cocina {orders.length > 0 && <span className="bg-orange-500 px-1.5 py-0.5 rounded-full text-xs">{orders.length}</span>}
+            </button>
+            <button onClick={() => {setCurrentView('invoices'); setMobileMenuOpen(false);}} className={'flex items-center gap-2 px-3 py-2 text-sm font-semibold ' + (currentView === 'invoices' ? 'bg-blue-700' : 'hover:bg-blue-500')}>
+              <FileText size={16} />Facturas
+            </button>
+            <button onClick={() => {setCurrentView('reports'); setMobileMenuOpen(false);}} className={'flex items-center gap-2 px-3 py-2 text-sm font-semibold ' + (currentView === 'reports' ? 'bg-blue-700' : 'hover:bg-blue-500')}>
+              <TrendingUp size={16} />Reportes
+            </button>
+            <button onClick={() => {setCurrentView('config'); setMobileMenuOpen(false);}} className={'flex items-center gap-2 px-3 py-2 text-sm font-semibold ' + (currentView === 'config' ? 'bg-blue-700' : 'hover:bg-blue-500')}>
+              <Settings size={16} />Config
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        {currentView === 'pos' && (
+          <div className="flex h-full">
+            <div className="flex-1 flex flex-col bg-white">
+              <div className="p-2 border-b">
+                <input
+                  type="text"
+                  placeholder="Buscar productos..."
+                  className="w-full px-3 py-2 text-sm border rounded mb-2"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <div className="flex gap-1 overflow-x-auto">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={'px-3 py-1 rounded text-xs whitespace-nowrap ' + (selectedCategory === cat ? 'bg-blue-600 text-white' : 'bg-gray-200')}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2">
+                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                  {filteredItems.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => addToCart(item)}
+                      className="bg-white border rounded p-2 hover:border-blue-500 hover:shadow transition"
+                    >
+                      <h3 className="font-semibold text-xs mb-1 line-clamp-2 min-h-[2rem]">{item.name}</h3>
+                      <p className="text-blue-600 font-bold text-sm">${item.price.toLocaleString()}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="w-80 xl:w-96 bg-white border-l flex flex-col">
+              <div className="p-3 border-b">
+                <div className="flex gap-1 mb-2">
+                  {['Mesa', 'Llevar'].map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setOrderType(type)}
+                      className={'flex-1 py-1 text-xs rounded font-semibold ' + (orderType === type ? 'bg-blue-600 text-white' : 'bg-gray-200')}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  {orderType === 'Mesa' && (
+                    <input type="text" placeholder="# Mesa" className="w-full px-2 py-1 text-sm border rounded" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} />
+                  )}
+                  <input type="text" placeholder="Cliente" className="w-full px-2 py-1 text-sm border rounded" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-2 py-1 text-sm border rounded">
+                    <option>Efectivo</option>
+                    <option>Tarjeta</option>
+                    <option>Transferencia</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3">
+                <h3 className="font-bold text-sm mb-2">Pedido ({cart.length})</h3>
+                {cart.length === 0 ? (
+                  <p className="text-center text-gray-400 mt-8 text-sm">Sin productos</p>
+                ) : (
+                  <div className="space-y-2">
+                    {cart.map(item => (
+                      <div key={item.id} className="bg-gray-50 rounded p-2 border">
+                        <div className="flex justify-between mb-1">
+                          <span className="font-semibold text-xs">{item.name}</span>
+                          <button onClick={() => removeFromCart(item.id)} className="text-red-500">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="flex gap-1 bg-white rounded border">
+                            <button onClick={() => updateQuantity(item.id, -1)} className="px-2 py-1"><Minus size={12} /></button>
+                            <span className="px-2 py-1 text-sm font-bold">{item.quantity}</span>
+                            <button onClick={() => updateQuantity(item.id, 1)} className="px-2 py-1"><Plus size={12} /></button>
+                          </div>
+                          <span className="font-bold text-sm">${(item.price * item.quantity).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3 border-t">
+                <div className="space-y-2 mb-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => setDiscountType(discountType === 'none' ? 'percent' : 'none')} className={'flex-1 py-1 text-xs rounded flex items-center justify-center gap-1 font-semibold ' + (discountType !== 'none' ? 'bg-green-600 text-white' : 'bg-gray-200')}>
+                      <Percent size={14} />Desc
+                    </button>
+                    <button onClick={() => setShowSplitBill(!showSplitBill)} className={'flex-1 py-1 text-xs rounded flex items-center justify-center gap-1 font-semibold ' + (showSplitBill ? 'bg-purple-600 text-white' : 'bg-gray-200')}>
+                      <Users size={14} />Dividir
+                    </button>
+                  </div>
+
+                  {discountType !== 'none' && (
+                    <div className="flex gap-2 bg-white p-2 rounded border">
+                      <select value={discountType} onChange={(e) => setDiscountType(e.target.value)} className="text-xs border rounded px-2 py-1">
+                        <option value="percent">%</option>
+                        <option value="fixed">$</option>
+                      </select>
+                      <input type="number" value={discountValue} onChange={(e) => setDiscountValue(Number(e.target.value))} className="flex-1 text-sm border rounded px-2 py-1" placeholder="Valor" />
+                    </div>
+                  )}
+
+                  {showSplitBill && (
+                    <div className="bg-white p-2 rounded border">
+                      <div className="flex items-center gap-2 mb-2">
+                        <button onClick={() => setSplitPeople(Math.max(2, splitPeople - 1))} className="bg-gray-200 p-1 rounded"><Minus size={14} /></button>
+                        <span className="flex-1 text-center text-sm font-bold">{splitPeople} personas</span>
+                        <button onClick={() => setSplitPeople(splitPeople + 1)} className="bg-gray-200 p-1 rounded"><Plus size={14} /></button>
+                      </div>
+                      <div className="text-center bg-purple-50 p-2 rounded">
+                        <p className="text-xs">Cada uno:</p>
+                        <p className="text-base font-bold text-purple-600">${getSplitAmount().toLocaleString()}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-1 items-center bg-white p-2 rounded border">
+                    <span className="text-xs font-semibold">Propina:</span>
+                    {[0, 10, 15, 20].map(p => (
+                      <button key={p} onClick={() => setTipPercent(p)} className={'flex-1 py-1 text-xs rounded font-semibold ' + (tipPercent === p ? 'bg-blue-600 text-white' : 'bg-gray-100')}>
+                        {p}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1 mb-3 text-sm">
+                  <div className="flex justify-between"><span>Subtotal</span><span>${getSubtotal().toLocaleString()}</span></div>
+                  {getDiscount() > 0 && (<div className="flex justify-between text-green-600"><span>Descuento</span><span>-${getDiscount().toLocaleString()}</span></div>)}
+                  <div className="flex justify-between"><span>IVA (19%)</span><span>${getIVA().toLocaleString()}</span></div>
+                  {getTip() > 0 && (<div className="flex justify-between text-blue-600"><span>Propina</span><span>${getTip().toLocaleString()}</span></div>)}
+                  <div className="flex justify-between font-bold text-lg border-t pt-1"><span>TOTAL</span><span className="text-green-600">${getTotal().toLocaleString()}</span></div>
+                </div>
+
+                <div className="space-y-1">
+                  {orderType === 'Mesa' && (
+                    <button onClick={handleSaveTable} className="w-full py-2 bg-purple-600 text-white rounded text-sm font-bold hover:bg-purple-700 flex items-center justify-center gap-1">
+                      <ShoppingCart size={16} />Guardar Mesa
+                    </button>
+                  )}
+                  <button onClick={handleSendToKitchen} className="w-full py-2 bg-orange-600 text-white rounded text-sm font-bold hover:bg-orange-700 flex items-center justify-center gap-1">
+                    <Printer size={16} />Imprimir Comanda
+                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={clearCart} className="flex-1 py-2 bg-gray-300 rounded text-sm font-bold hover:bg-gray-400">Cancelar</button>
+                    <button onClick={handleProcessOrder} className="flex-1 py-2 bg-blue-600 text-white rounded text-sm font-bold hover:bg-blue-700 flex items-center justify-center gap-1">
+                      <Printer size={16} />Facturar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentView === 'tables' && (
+          <div className="p-4">
+            <h2 className="text-xl font-bold mb-4">Mesas Activas</h2>
+            {activeTables.length === 0 ? (
+              <p className="text-center text-gray-400 mt-12">No hay mesas activas</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {activeTables.map((table, idx) => (
+                  <div key={idx} className="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+                    <h3 className="font-bold text-lg mb-2">Mesa {table.table}</h3>
+                    <p className="text-sm mb-2">{table.customer}</p>
+                    <div className="mb-3">
+                      {table.items.map((item, i) => (
+                        <div key={i} className="text-xs flex justify-between">
+                          <span>{item.quantity}x {item.name}</span>
+                          <span>${(item.price * item.quantity).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between font-bold text-green-600 mb-3 border-t pt-2">
+                      <span>Total:</span>
+                      <span>${table.total.toLocaleString()}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleLoadTable(table)} className="flex-1 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-700">
+                        Editar
+                      </button>
+                      <button onClick={() => handleCloseTable(table)} className="flex-1 py-2 bg-green-600 text-white rounded text-sm font-semibold hover:bg-green-700">
+                        Pagar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentView === 'kitchen' && (
+          <div className="p-4">
+            <h2 className="text-xl font-bold mb-4">Comandas en Cocina</h2>
+            {orders.length === 0 ? (
+              <p className="text-center text-gray-400 mt-12">No hay comandas</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {orders.map((order, idx) => (
+                  <div key={idx} className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+                    <div className="flex justify-between mb-2">
+                      <h3 className="font-bold">{order.orderNumber}</h3>
+                      <button onClick={() => printComandaPDF(order)} className="text-blue-600 hover:text-blue-800">
+                        <Printer size={18} />
+                      </button>
+                    </div>
+                    <p className="text-sm mb-2">{order.orderType} {order.table && '- Mesa ' + order.table}</p>
+                    <div className="space-y-1 mb-3">
+                      {order.items.map((item, i) => (
+                        <div key={i} className="text-sm">
+                          <strong>{item.quantity}x</strong> {item.name}
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setOrders(orders.filter((_, i) => i !== idx))} className="w-full py-2 bg-green-600 text-white rounded font-semibold hover:bg-green-700">
+                      Listo
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentView === 'invoices' && (
+          <div className="p-4">
+            <h2 className="text-xl font-bold mb-4">Facturas Generadas</h2>
+            {completedOrders.length === 0 ? (
+              <p className="text-center text-gray-400 mt-12">No hay facturas</p>
+            ) : (
+              <div className="bg-white rounded-lg shadow overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-sm font-semibold">Factura</th>
+                      <th className="px-4 py-2 text-left text-sm font-semibold">Fecha</th>
+                      <th className="px-4 py-2 text-left text-sm font-semibold">Cliente</th>
+                      <th className="px-4 py-2 text-left text-sm font-semibold">Total</th>
+                      <th className="px-4 py-2 text-center text-sm font-semibold">Accion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {completedOrders.map((invoice, idx) => (
+                      <tr key={idx} className="border-b hover:bg-gray-50">
+                        <td className="px-4 py-2 text-sm font-mono">{invoice.invoiceNumber}</td>
+                        <td className="px-4 py-2 text-sm">{invoice.date}</td>
+                        <td className="px-4 py-2 text-sm">{invoice.customer}</td>
+                        <td className="px-4 py-2 text-sm font-bold text-green-600">${invoice.total.toLocaleString()}</td>
+                        <td className="px-4 py-2 text-center">
+                          <button onClick={() => printInvoicePDF(invoice)} className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 inline-flex items-center gap-1">
+                            <Printer size={12} />Imprimir
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentView === 'reports' && (
+          <div className="p-4">
+            <h2 className="text-xl font-bold mb-4">Reportes del Dia</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold">Ventas Hoy</h3>
+                  <DollarSign className="text-green-500" size={20} />
+                </div>
+                <p className="text-2xl font-bold">${dailySales.reduce((sum, s) => sum + s.total, 0).toLocaleString()}</p>
+                <p className="text-xs text-gray-500">{dailySales.length} facturas</p>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold">Mesas</h3>
+                  <ShoppingCart className="text-purple-500" size={20} />
+                </div>
+                <p className="text-2xl font-bold">{activeTables.length}</p>
+                <p className="text-xs text-gray-500">Activas</p>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold">Cocina</h3>
+                  <ChefHat className="text-orange-500" size={20} />
+                </div>
+                <p className="text-2xl font-bold">{orders.length}</p>
+                <p className="text-xs text-gray-500">En preparacion</p>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold">Propinas</h3>
+                  <Gift className="text-blue-500" size={20} />
+                </div>
+                <p className="text-2xl font-bold">${dailySales.reduce((sum, s) => sum + (s.tip || 0), 0).toLocaleString()}</p>
+                <p className="text-xs text-gray-500">Recibidas</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-lg font-bold mb-3">Historial de Ventas</h3>
+              {dailySales.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">No hay ventas registradas</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-sm font-semibold">Factura</th>
+                        <th className="px-3 py-2 text-left text-sm font-semibold">Cliente</th>
+                        <th className="px-3 py-2 text-right text-sm font-semibold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailySales.map((sale, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-3 py-2 text-sm font-mono">{sale.invoiceNumber}</td>
+                          <td className="px-3 py-2 text-sm">{sale.customer}</td>
+                          <td className="px-3 py-2 text-sm font-bold text-green-600 text-right">${sale.total.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {currentView === 'config' && (
+          <div className="p-4 max-w-2xl mx-auto">
+            <h2 className="text-xl font-bold mb-4">Configuracion Google Sheets</h2>
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Database className={isConnected ? 'text-green-500' : 'text-gray-400'} size={32} />
+                <div>
+                  <h3 className="font-bold">Estado</h3>
+                  <p className={'text-sm ' + (isConnected ? 'text-green-600' : 'text-gray-500')}>
+                    {isConnected ? 'Conectado' : 'No conectado'}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">URL del Web App</label>
+                  <input
+                    type="text"
+                    placeholder="https://script.google.com/macros/s/..."
+                    className="w-full px-3 py-2 text-sm border rounded"
+                    value={googleSheetUrl}
+                    onChange={(e) => setGoogleSheetUrl(e.target.value)}
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    if (googleSheetUrl) {
+                      setIsConnected(true);
+                      alert('Conexion establecida exitosamente');
+                    } else {
+                      alert('Por favor ingrese la URL del Web App');
+                    }
+                  }}
+                  className="w-full py-3 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+                >
+                  Conectar con Google Sheets
+                </button>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 rounded">
+                <h4 className="font-bold text-blue-900 mb-2">Instrucciones:</h4>
+                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>Crea una hoja de Google Sheets</li>
+                  <li>Ve a Extensiones - Apps Script</li>
+                  <li>Pega el codigo Code.gs proporcionado</li>
+                  <li>Guarda el proyecto</li>
+                  <li>Implementa como Aplicacion web</li>
+                  <li>Ejecutar como: Tu cuenta</li>
+                  <li>Acceso: Cualquier persona</li>
+                  <li>Copia la URL generada</li>
+                  <li>Pegala arriba y haz clic en Conectar</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default RestaurantPOS;
 
